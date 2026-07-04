@@ -1,0 +1,492 @@
+{
+  "version": "3.1",
+  "components": {
+    "schemas": {
+      "OptimizeInput": {
+        "type": "object",
+        "properties": {
+          "depot": {
+            "$ref": "#/components/schemas/Place",
+            "description": "Single depot, used as both start and end for every vehicle."
+          },
+          "stops": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OptimizeStop"
+            },
+            "minItems": 1
+          },
+          "vehicles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OptimizeVehicle"
+            },
+            "minItems": 1
+          },
+          "options": {
+            "type": "object",
+            "properties": {
+              "time_limit_s": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Solve budget in seconds; omit to auto-scale with problem size."
+              }
+            },
+            "required": []
+          }
+        },
+        "required": [
+          "depot",
+          "stops",
+          "vehicles"
+        ]
+      },
+      "Place": {
+        "type": "object",
+        "properties": {
+          "lat": {
+            "type": "number"
+          },
+          "lng": {
+            "type": "number"
+          },
+          "address": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "description": "A geographic point the caller supplies either as coordinates or as an address\nstring to geocode. `lat`/`lng` are the solver's own location fields."
+      },
+      "OptimizeStop": {
+        "type": "object",
+        "properties": {
+          "lat": {
+            "type": "number"
+          },
+          "lng": {
+            "type": "number"
+          },
+          "address": {
+            "type": "string"
+          },
+          "pickup": {
+            "type": "number"
+          },
+          "delivery": {
+            "type": "number"
+          },
+          "service_duration_s": {
+            "type": "number"
+          },
+          "tw_early_s": {
+            "type": "number"
+          },
+          "tw_late_s": {
+            "type": "number"
+          },
+          "prize": {
+            "type": "number"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "description": "A delivery/pickup stop: a place plus solver site constraints."
+      },
+      "OptimizeVehicle": {
+        "type": "object",
+        "properties": {
+          "tw_early_s": {
+            "type": "number"
+          },
+          "tw_late_s": {
+            "type": "number"
+          },
+          "capacity": {
+            "type": "number"
+          },
+          "available_count": {
+            "type": "number"
+          },
+          "cost": {
+            "$ref": "#/components/schemas/solver.VehicleCost"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "description": "A vehicle (type): solver vehicle constraints; `available_count` clones this type."
+      },
+      "solver.VehicleCost": {
+        "type": "object",
+        "properties": {
+          "fixed": {
+            "type": "number"
+          },
+          "distance": {
+            "type": "number"
+          },
+          "duration": {
+            "type": "number"
+          },
+          "stop": {
+            "type": "number"
+          }
+        },
+        "required": []
+      },
+      "GeocodeInput": {
+        "type": "object",
+        "properties": {
+          "addresses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Address strings to geocode (free-form, as a user would type them)."
+          }
+        },
+        "required": [
+          "addresses"
+        ],
+        "description": "Input for the `routing24_geocode` WebMCP tool."
+      },
+      "GeocodeResult": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string",
+            "description": "The address string as passed in."
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "matched": {
+            "type": "string",
+            "description": "Canonical/expanded address the geocoder matched."
+          },
+          "lat": {
+            "type": "number"
+          },
+          "lng": {
+            "type": "number"
+          },
+          "quality": {
+            "oneOf": [
+              {
+                "const": "rooftop"
+              },
+              {
+                "const": "failed"
+              }
+            ]
+          }
+        },
+        "required": [
+          "input",
+          "ok",
+          "quality"
+        ]
+      },
+      "OptimizeStatus": {
+        "type": "object",
+        "properties": {
+          "phase": {
+            "$ref": "#/components/schemas/OptimizePhase"
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "progress": {
+            "type": "number",
+            "description": "0..1 while solving, when available."
+          },
+          "feasible": {
+            "type": "boolean"
+          },
+          "routes": {
+            "type": "number"
+          },
+          "stops": {
+            "type": "number"
+          },
+          "unservedCount": {
+            "type": "number"
+          },
+          "distance": {
+            "type": "number"
+          },
+          "distanceUnit": {
+            "oneOf": [
+              {
+                "const": "km"
+              },
+              {
+                "const": "mi"
+              }
+            ]
+          },
+          "durationHours": {
+            "type": "number"
+          },
+          "error": {
+            "type": "string"
+          },
+          "planUuid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "phase",
+          "running"
+        ]
+      },
+      "OptimizePhase": {
+        "oneOf": [
+          {
+            "const": "idle"
+          },
+          {
+            "const": "geocoding"
+          },
+          {
+            "const": "matrix"
+          },
+          {
+            "const": "solving"
+          },
+          {
+            "const": "saving"
+          },
+          {
+            "const": "done"
+          },
+          {
+            "const": "error"
+          }
+        ]
+      },
+      "PlanSolution": {
+        "type": "object",
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "description": "`false` when the loaded plan carries no optimized solution yet."
+          },
+          "planUuid": {
+            "type": "string"
+          },
+          "planUrl": {
+            "type": "string",
+            "description": "Absolute URL of the plan's optimize page."
+          },
+          "feasible": {
+            "type": "boolean",
+            "description": "True when every constraint is satisfied."
+          },
+          "complete": {
+            "type": "boolean",
+            "description": "True when the solve ran to completion (not cancelled part-way)."
+          },
+          "distanceUnit": {
+            "oneOf": [
+              {
+                "const": "km"
+              },
+              {
+                "const": "mi"
+              }
+            ]
+          },
+          "routeCount": {
+            "type": "number",
+            "description": "Number of routes used."
+          },
+          "stopCount": {
+            "type": "number",
+            "description": "Number of site stops served across all routes."
+          },
+          "unservedCount": {
+            "type": "number",
+            "description": "Number of site stops that could not be served."
+          },
+          "distance": {
+            "type": "number",
+            "description": "Total travel distance across all routes, in `distanceUnit`."
+          },
+          "durationHours": {
+            "type": "number",
+            "description": "Total duration across all routes, hours."
+          },
+          "unserved": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ids of the sites left unserved, if any."
+          },
+          "routes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanSolutionRoute"
+            },
+            "description": "One entry per used route, in on-screen order."
+          }
+        },
+        "required": [
+          "available"
+        ],
+        "description": "The full optimized solution for the currently-loaded plan — whether it was\njust optimized in this tab or opened via its URL. This is the structured data\nbehind {@link OptimizeStatus}: the same rollups plus every route's ordered\nstops. `available` is `false` (and the detail fields are omitted) when the\nloaded plan has no solution yet."
+      },
+      "PlanSolutionRoute": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "number",
+            "description": "1-based route number, matching the on-screen order."
+          },
+          "vehicleId": {
+            "type": "string",
+            "description": "Id of the vehicle serving this route."
+          },
+          "siteCount": {
+            "type": "number",
+            "description": "Count of site stops served (the depot start/end are excluded)."
+          },
+          "distance": {
+            "type": "number",
+            "description": "Total travel distance of the route, in `distanceUnit`."
+          },
+          "durationHours": {
+            "type": "number",
+            "description": "Total route duration (travel + service + wait), hours."
+          },
+          "startTimeS": {
+            "type": "number",
+            "description": "When the vehicle leaves the depot, seconds since midnight."
+          },
+          "endTimeS": {
+            "type": "number",
+            "description": "When the vehicle returns to the depot, seconds since midnight."
+          },
+          "stops": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanSolutionStop"
+            },
+            "description": "Depot → stops → depot, in visit order."
+          }
+        },
+        "required": [
+          "index",
+          "siteCount",
+          "distance",
+          "durationHours",
+          "stops"
+        ],
+        "description": "One vehicle's optimized route: an ordered depot → stops → depot sequence."
+      },
+      "PlanSolutionStop": {
+        "type": "object",
+        "properties": {
+          "seq": {
+            "type": "number",
+            "description": "0-based position within the route (0 = the starting depot)."
+          },
+          "type": {
+            "oneOf": [
+              {
+                "const": "depot"
+              },
+              {
+                "const": "site"
+              }
+            ],
+            "description": "Whether this node is the depot or a delivery/pickup site."
+          },
+          "id": {
+            "type": "string",
+            "description": "The site/depot id (the id you passed to optimize, or an auto-assigned one)."
+          },
+          "address": {
+            "type": "string",
+            "description": "Matched street address, when known."
+          },
+          "lat": {
+            "type": "number"
+          },
+          "lng": {
+            "type": "number"
+          },
+          "arrivalTimeS": {
+            "type": "number",
+            "description": "Arrival time, seconds since midnight."
+          },
+          "departureTimeS": {
+            "type": "number",
+            "description": "Departure time (arrival + service), seconds since midnight."
+          },
+          "serviceDurationS": {
+            "type": "number",
+            "description": "Time spent servicing this stop, seconds."
+          },
+          "legDistance": {
+            "type": "number",
+            "description": "Distance of the travel leg arriving at this stop, in `distanceUnit`."
+          },
+          "legDurationS": {
+            "type": "number",
+            "description": "Duration of the travel leg arriving at this stop, seconds."
+          },
+          "carriedLoad": {
+            "type": "number",
+            "description": "Vehicle load carried on arrival."
+          },
+          "deliveredLoad": {
+            "type": "number",
+            "description": "Load delivered at this stop."
+          },
+          "pickedUpLoad": {
+            "type": "number",
+            "description": "Load picked up at this stop."
+          }
+        },
+        "required": [
+          "seq",
+          "type",
+          "arrivalTimeS",
+          "departureTimeS",
+          "serviceDurationS",
+          "legDistance",
+          "legDurationS",
+          "carriedLoad",
+          "deliveredLoad",
+          "pickedUpLoad"
+        ],
+        "description": "One stop on an optimized route, in visit order. Every field is resolved from\nthe loaded plan — the caller never parses raw solver output."
+      }
+    }
+  },
+  "schemas": [
+    {
+      "$ref": "#/components/schemas/OptimizeInput"
+    },
+    {
+      "$ref": "#/components/schemas/GeocodeInput"
+    },
+    {
+      "$ref": "#/components/schemas/GeocodeResult"
+    },
+    {
+      "$ref": "#/components/schemas/OptimizeStatus"
+    },
+    {
+      "$ref": "#/components/schemas/PlanSolution"
+    }
+  ]
+}
