@@ -5,13 +5,18 @@
 <h1 align="center">Routing24 route optimizer — Agent Skill</h1>
 
 <p align="center">
-  Plan and optimize vehicle delivery routes from natural language, right in the browser.
+  Plan and optimize vehicle delivery routes from natural language.
 </p>
 
 `routing24-optimizer` is an Agent Skill for driving [Routing24](https://routing24.com) route
 optimization through its `routing24_*` WebMCP tools. It turns a list of stops and
-vehicles into an optimized, shareable multi-stop route plan. Everything runs
-client-side in the user's own browser tab. There is no server API and no API key.
+vehicles into an optimized, shareable multi-stop route plan.
+
+The route optimization itself runs in your own browser, on your computer. It draws
+on Routing24's own services for geocoding, routing and distance matrices, and
+ML/LLM, reached with an opaque auth token issued for your account, whether
+registered or anonymous. No API key is required, and no sign-in is needed to run
+the full flow.
 
 ## Install
 

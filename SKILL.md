@@ -8,18 +8,18 @@ description: >-
   delivery run or dispatch schedule, solve a vehicle routing problem (Rich
   VRP), sequence stops for one or more drivers, vans or trucks from a depot,
   do route planning or last-mile delivery optimization, or asks for Routing24
-  routing24.com. Runs entirely in the user's own browser tab via WebMCP tools
+  routing24.com. Driven from the user's own browser tab via WebMCP tools
   (routing24_geocode, routing24_optimize, routing24_status, routing24_save,
   ...) registered on document.modelContext.
 license: Proprietary. Visit https://routing24.com/terms for full terms and conditions.
 compatibility: >-
   Requires a browser agent on an open routing24.com tab: a WebMCP-capable
   host, or a JS-eval integration such as Claude in Chrome / Cowork
-  (javascript_tool and navigate) driving the same routing24_* tools via
-  document.modelContext. Route optimization runs client-side; there is no
-  server API and no API key. Geocoding and distance matrices are computed
-  server-side under an opaque temporary token. No sign-in is required; the
-  full flow works anonymously.
+  (javascript_tool and navigate) driving the routing24_* tools via
+  document.modelContext. Route optimization runs client-side; geocoding,
+  routing/distance matrices, and ML/LLM run on Routing24 servers under an
+  opaque token issued for a registered or anonymous account. No public API or
+  API key is needed, and no sign-in: the full flow works anonymously.
 metadata:
   author: Routinghub LLC
   version: "0.1.0~beta"
@@ -31,8 +31,11 @@ Turn a natural-language routing request ("optimize these 8 addresses with 2 vans
 from this depot") into an optimized route plan on **Routing24**, shown on the map,
 with a link the user can open.
 
-Routing24 has **no server Optimization API** — everything runs in the browser. The page
-registers **WebMCP tools** under the `routing24_*` prefix on
+Routing24 exposes **no public Optimization API** — you drive it through the page. The
+route optimization runs **client-side in the browser** (WASM), while geocoding,
+routing/distance matrices, and ML/LLM run on **Routing24's own servers**, reached
+with an opaque auth token issued for the user's account (registered or anonymous).
+The page registers **WebMCP tools** under the `routing24_*` prefix on
 `document.modelContext` (the W3C WebMCP draft surface; the app bundles a polyfill
 so the tools exist even without native browser support). Discover them with
 `getTools()`, invoke them with `executeTool(tool, JSON.stringify(args))` — which
@@ -48,11 +51,14 @@ is asynchronous: you start it, then **poll `routing24_status`**.
   `javascript_tool` tools, which calls the same tools via
   `document.modelContext`. If neither is available, tell the user this
   automation requires a browser integration and stop.
-- Everything runs **client-side** via the `routing24_*` WebMCP tools; there is
-  no server API and no API key. **No sign-in is required** — the full flow
-  (geocode, optimize, render, save, share) works anonymously. Do not ask the user
-  to log in. Signing in only changes **where** the plan is stored (see the
-  plan-link note under *Notes & pitfalls*).
+- You drive Routing24 through the `routing24_*` WebMCP tools; there is **no
+  public API and no API key**. Route optimization runs **client-side in the
+  browser**, while geocoding, routing/distance matrices, and ML/LLM run on
+  **Routing24's own servers** under an opaque token issued for the user's account
+  (registered or anonymous). **No sign-in is required** — the full flow (geocode,
+  optimize, render, save, share) works anonymously. Do not ask the user to log in.
+  Signing in only changes **where** the plan is stored (see the plan-link note
+  under *Notes & pitfalls*).
 
 ## Procedure
 
@@ -160,8 +166,10 @@ Load these only as the task calls for them (progressive disclosure):
 
 ## Notes & pitfalls
 
-- Everything happens in the user's own tab; you are not calling any server API
-  directly.
+- You drive everything through the user's own tab via the WebMCP tools; you never
+  call a Routing24 server API directly. The tools do that for you (geocoding,
+  routing/matrix, ML/LLM) under an opaque token, while the optimizer itself runs
+  client-side in the tab.
 - `executeTool` resolves to a **JSON string** (parse it; `null` means no
   value) and **rejects** on validation or handler errors — wrap calls in
   try/catch and relay the message. You cannot receive an image from the tools —
