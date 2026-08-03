@@ -24,7 +24,7 @@ compatibility: >-
   API key is needed, and no sign-in: the full flow works anonymously.
 metadata:
   author: Routinghub LLC
-  version: "0.6.0~beta"
+  version: "1.0.0"
 ---
 
 # Routing24 route optimizer
@@ -133,9 +133,10 @@ retry the call hoping for a different answer.
 
 5. **Parse the request** into the `routing24_optimize` input shape (see the
    **API contract** for the full definition). Times are seconds-since-midnight;
-   all fields except the addresses are optional. Use **≥2 stops** and **≥1
-   vehicle**. Bad input makes the call reject with a message naming the offending
-   fields — relay it to the user.
+   all fields except the addresses are optional. The schema requires **≥1 stop**
+   and **≥1 vehicle**; with a single stop there is nothing to sequence, so
+   expect real requests to carry ≥2 stops. Bad input makes the call reject with
+   a message naming the offending fields — relay it to the user.
 
 6. **Geocode + confirm.** Run
    `await __r24call('routing24_geocode', { addresses: [<depot + every stop address>] })`.
@@ -243,7 +244,7 @@ Load these only as the task calls for them (progressive disclosure):
 
 ## Version & keeping current
 
-- This skill is **version 0.6.0~beta**. Its bundled reference
+- This skill is **version 1.0.0**. Its bundled reference
   (`references/api.md` + `references/schema.json`) is generated from Routing24's
   own types and is correct as of this version.
 - The **always-current** copy of the full contract is served at
@@ -283,8 +284,8 @@ Load these only as the task calls for them (progressive disclosure):
 - **Two failure channels on the editing tools**: `rejection.code` = the
   ENGINE refused the batch (structural: unknown ids, bad anchors,
   `stale_revision`, …); `errorCode` = the tool refused or failed around the
-  engine (`solve_in_progress`, `no_solution`, `slot_out_of_range`,
-  `nothing_to_undo`, `session_error`, …). `session_error` means the editing
+  engine (`solve_in_progress`, `no_solution`, `slot_out_of_range`, `route_too_small`, `optimize_running`, `nothing_to_undo`, `nothing_to_redo`, `session_error`).
+  `session_error` means the editing
   session itself failed and the app resynced — re-read `routing24_solution`
   and retry ONCE.
 - **Edits are never rejected for violating constraints** — time windows,

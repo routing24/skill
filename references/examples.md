@@ -44,8 +44,8 @@ await __r24call('routing24_optimize', {
         // tags satisfy stops' required_tags. max_reloads caps mid-route reloads
         // (multi-trip); vehicles reload at the depot by default when needed.
         // break_rules: EU driver-break preset shown (45 min before exceeding
-        // 4.5 h driving, splittable 15+30); US = { max_driving_s: 28800,
-        // duration_s: 1800, service_counts: true }. Omit for no breaks.
+        // 4.5 h driving, splittable 15+30);
+        // US = { max_driving_s: 28800, duration_s: 1800, service_counts: true }. Omit for no breaks.
         // cost: only when the user gives real rates (per km/mi, per hour,
         // fixed per use) — omit it entirely (as here) to minimize plain
         // distance; never send zeros for that. Explicit 0 is for mixed

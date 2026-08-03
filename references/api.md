@@ -1,6 +1,6 @@
 # Routing24 route optimizer — API reference
 
-> Generated from Routing24's own types (skill version 0.6.0~beta). The
+> Generated from Routing24's own types (skill version 1.0.0). The
 > always-current copy is served at https://routing24.com/llms.txt.
 
 WebMCP tools registered on `document.modelContext` on every
@@ -145,8 +145,7 @@ type PaidFeatureReport = {
   `transfer_id` and role (all `pickup` or all `delivery`), sharing one
   `group` of their own (equal loads), are candidate locations for that end —
   the solver serves exactly one candidate per role and reports the rest as
-  `alternativesNotChosen`. Max 8 candidates per role, 16 pickup x delivery
-  combinations.
+  `alternativesNotChosen`. Max 8 candidates per role, 16 pickup x delivery combinations.
 - **Sequences**: stops sharing a `sequence_group` are served all-or-none, by
   ONE vehicle, in non-decreasing `sequence_rank` order (other stops may come
   between them). Plain stops only (no transfers, no `group`), one service
@@ -163,24 +162,23 @@ type PaidFeatureReport = {
   the zeros are ignored, plain distance is minimized, and the result carries a
   `warnings` entry. An explicit 0 next to priced vehicles is honored (a bike
   with free mileage beside a van at 2/km steers mileage onto the bike).
-- **Driver breaks** (per vehicle). `break_rules` (max one): a driving-trigger
+- **Driver breaks** (per vehicle). `break_rules` (max 1): a driving-trigger
   rule — after `max_driving_s` of accumulated driving the driver needs a
   `duration_s` pause; optional `split_first_s`/`split_second_s` allow taking
   it as two ordered parts; `service_counts: true` lets any contiguous
   non-driving time (service, waiting) of the required length satisfy the rule.
-  Legal presets: **EU** (561/2006) `{ max_driving_s: 16200, duration_s: 2700,
-  split_first_s: 900, split_second_s: 1800 }`; **US** (FMCSA)
-  `{ max_driving_s: 28800, duration_s: 1800, service_counts: true }`.
-  `fixed_breaks` (max two): compulsory clock-window pauses (e.g. lunch) that
+  Legal presets: **EU** (561/2006) `{ max_driving_s: 16200, duration_s: 2700, split_first_s: 900, split_second_s: 1800 }`;
+  **US** (FMCSA) `{ max_driving_s: 28800, duration_s: 1800, service_counts: true }`.
+  `fixed_breaks` (max 2): compulsory clock-window pauses (e.g. lunch) that
   must START inside `[tw_early_s, tw_late_s]`. Carry-in allowance:
   `period_driving_limit_s` minus `period_driven_s` (externally tracked, per
-  driver) caps the route's total driving time (EU week = 201600, US 7-day =
-  216000). Stops/depot take `no_break: true` to forbid hosting a break there.
+  driver) caps the route's total driving time (EU week = 201600, US 7-day = 216000).
+  Stops/depot take `no_break: true` to forbid hosting a break there.
   Planned breaks come back as `type:"break"` stops in `routing24_solution`.
 
 ### `routing24_status` → `OptimizeStatus`
 No input. Snapshot of the current optimization — poll (~every 3s) while solving.
-`phase` walks `idle → geocoding → matrix → solving → done` (or `error`).
+`phase` walks `idle → geocoding → matrix → solving → saving → done` (or `error`).
 ```ts
 type OptimizeStatus = {
     phase: "idle" | "geocoding" | "matrix" | "solving" | "saving" | "done" | "error";
@@ -238,8 +236,8 @@ type PlanSolution = {
     distance?: number;  // Total travel distance across all routes, in `distanceUnit`.
     durationHours?: number;  // Total duration across all routes, hours.
     unassigned?: string[];  // Ids of the sites left unassigned, if any.
-    cost?: { total: number; overtime: number; vehicle: number; stop?: number };  // Economic cost (money). Coverage is `unassignedCount`, never a cost.
-    objective?: { total: number; unassignedPenalty: number };  // Solver comparison scalar — see {@link SolverObjective}; never money.
+    cost?: SolutionCost;  // Economic cost (money). Coverage is `unassignedCount`, never a cost.
+    objective?: SolverObjective;  // Solver comparison scalar — see {@link SolverObjective}; never money.
     problemsCount?: number;  // Total constraint-problem markers across all routes (0 = feasible).
     routes?: PlanSolutionRoute[];  // One entry per route slot (empty slots included), in slot order.
     revision?: number;  // Session revision the routes reflect; bumps on every committed edit.
@@ -251,7 +249,7 @@ type PlanSolution = {
     editedAt?: number;  // Last manual-edit timestamp (ms since epoch); absent = never edited.
     diagnosticsStale?: boolean;  // True when `unassignedDiagnostics` predates the latest edits — pass `refresh_diagnostics: true` to recompute before reading it.
     unassignedDiagnostics?: UnassignedDiagnosticsReport;  // Why sites are unassigned, in prose (capped; see `truncated`/`omitted`).
-    insertionQuotes?: { site: string; routeSlot?: number; vehicleId?: string; cost: number; durationS: number; before?: string; after?: string; deliveryAfter?: string }[];  // Ready-to-serve quotes for the unassigned orders (one per quotable site; none when nothing fits). Refreshed with the diagnostics — pass `refresh_diagnostics: true` when `diagnosticsStale`.
+    insertionQuotes?: InsertionQuote[];  // Ready-to-serve quotes for the unassigned orders (one per quotable site; none when nothing fits). Refreshed with the diagnostics — pass `refresh_diagnostics: true` when `diagnosticsStale`.
     driftFromOptimized?: OptimizedDrift;  // Drift vs the last full optimization (user's manual edits included) — when `severity` is `degraded`/`severe`, tell the user and offer a fix.
 };
 ```
@@ -272,7 +270,7 @@ type PlanSolutionRoute = {
     endTimeS?: number;  // When the route ends (depot return, or service completion at the last order on an open-ended route), seconds since midnight.
     feasible?: boolean;  // True when every constraint on this route is satisfied.
     problems?: PlanProblem[];  // Route-level constraint problems (also pinned per-stop).
-    cost?: { total: number; overtime: number; vehicle: number; stop?: number };  // Economic cost of this route (absent on pre-feature solutions).
+    cost?: RouteCost;  // Economic cost of this route (absent on pre-feature solutions).
     stops: PlanSolutionStop[];  // Stops in visit order; bounded by depot stops unless the vehicle's start/finish depot is empty (open-ended).
 };
 ```
@@ -563,8 +561,8 @@ type SessionState = {
     durationHours?: number;
     unassignedCount?: number;
     unassigned?: string[];  // Ids of the sites currently unassigned.
-    cost?: { total: number; overtime: number; vehicle: number; stop?: number };  // Economic cost (money). Coverage is `unassignedCount`, never a cost.
-    objective?: { total: number; unassignedPenalty: number };  // Solver comparison scalar — see {@link SolverObjective}; never money.
+    cost?: SolutionCost;  // Economic cost (money). Coverage is `unassignedCount`, never a cost.
+    objective?: SolverObjective;  // Solver comparison scalar — see {@link SolverObjective}; never money.
     userAssigned?: string[];
     userUnassigned?: string[];
     routes?: RouteSummary[];  // Every route slot, fresh — supersedes slots from before the mutation.
@@ -581,7 +579,7 @@ type RouteSummary = {
     durationHours?: number;  // Total duration (travel + service + wait), hours.
     feasible?: boolean;
     problems?: PlanProblem[];
-    cost?: { total: number; overtime: number; vehicle: number; stop?: number };  // Economic cost of this route (absent on pre-feature solutions).
+    cost?: RouteCost;  // Economic cost of this route (absent on pre-feature solutions).
 };
 ```
 ```ts
@@ -624,11 +622,9 @@ type OptimizeRouteResult = {
 ```
 
 ### `routing24_undo` / `routing24_redo` → `HistoryResult`
-No input. Walk the edit history one committed batch at a time. The history is
-**shared with the user's own manual edits** — an undo can revert something the
-user just did by hand, so never undo speculatively; prefer a compensating
-`routing24_edit` batch. Empty history returns
-`{ applied: false, error: "nothing_to_undo" | "nothing_to_redo" }`.
+No input. Walk the edit history one committed batch at a time.
+The edit history is SHARED with the user's own manual edits — an undo can revert something the user just did by hand, so never call it speculatively; prefer a compensating routing24_edit batch.
+Returns {applied:false, errorCode:"nothing_to_undo" | "nothing_to_redo"} on an empty history (error carries the human-readable detail).
 ```ts
 // Result of `routing24_undo` / `routing24_redo`.
 type HistoryResult = {
