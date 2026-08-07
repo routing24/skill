@@ -1,6 +1,6 @@
 # Routing24 route optimizer — API reference
 
-> Generated from Routing24's own types (skill version 1.1.0). The
+> Generated from Routing24's own types (skill version 1.1.1). The
 > always-current copy is served at https://routing24.com/llms.txt.
 
 WebMCP tools registered on `document.modelContext` on every
@@ -165,9 +165,12 @@ type PaidFeatureReport = {
   without one is measured from the start of the planning horizon (0), which
   is stricter, not looser: **always send `release_time_s` with it**. A stop
   whose `tw_early_s` is later than `release_time_s` + the bound cannot be
-  served at all and rejects the whole call, as does a plain stop carrying a
-  `pickup` load (the bound covers `delivery` goods, on board from the
-  depot). On a linked (pickup & delivery)
+  served at all and rejects the whole call. A plain stop carrying a
+  `pickup` load is dropped on its own instead (the bound covers
+  `delivery` goods, on board from the depot; a pickup load boards at
+  service and rides on unbounded): the solve runs and that stop comes back
+  in `unassigned`, reported as `field_not_applicable`.
+  On a linked (pickup & delivery)
   stop it instead bounds the ride time from pickup to delivery (waiting
   counts; a reload does not reset it) — set identically on every end of the
   transfer: ends that disagree do NOT reject the call, they are dropped from
@@ -337,7 +340,7 @@ type PlanSolutionStop = {
 // NOT include unassigned-order penalties — coverage is a count
 // (`unassignedCount`), not a cost. Absent on pre-feature solutions.
 type SolutionCost = {
-    total: number;  // Full economic cost: fixed + distance + duration + stop (incl. overtime).
+    total: number;  // Full economic cost: fixed + distance + duration (incl. overtime) + stop + ride overtime + load-distance.
     overtime: number;  // Overtime premium — a breakdown line already inside `total`.
     vehicle: number;  // `total` minus `overtime`.
     stop?: number;  // Per-stop cost addend inside `total` (absent when no vehicle prices stops).
@@ -349,7 +352,7 @@ type SolutionCost = {
 // One route's ECONOMIC cost, in the task's money units. Same shape rules as
 // {@link SolutionCost}.
 type RouteCost = {
-    total: number;  // Full economic cost of the route (fixed + distance + duration + stop incl. overtime).
+    total: number;  // Full economic cost of the route: fixed + distance + duration (incl. overtime) + stop + ride overtime + load-distance.
     overtime: number;  // Overtime premium inside `total`.
     vehicle: number;  // `total` minus `overtime`.
     stop?: number;  // Per-stop cost addend inside `total` (absent when the vehicle has no stop cost).

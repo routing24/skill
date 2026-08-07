@@ -760,7 +760,7 @@
         "properties": {
           "total": {
             "type": "number",
-            "description": "Full economic cost: fixed + distance + duration + stop (incl. overtime)."
+            "description": "Full economic cost: fixed + distance + duration (incl. overtime) + stop\n+ ride overtime + load-distance."
           },
           "overtime": {
             "type": "number",
@@ -961,7 +961,7 @@
         "properties": {
           "total": {
             "type": "number",
-            "description": "Full economic cost of the route (fixed + distance + duration + stop incl. overtime)."
+            "description": "Full economic cost of the route: fixed + distance + duration (incl.\novertime) + stop + ride overtime + load-distance."
           },
           "overtime": {
             "type": "number",

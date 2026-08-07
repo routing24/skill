@@ -24,7 +24,7 @@ compatibility: >-
   API key is needed, and no sign-in: the full flow works anonymously.
 metadata:
   author: Routinghub LLC
-  version: "1.1.0"
+  version: "1.1.1"
 ---
 
 # Routing24 route optimizer
@@ -67,8 +67,8 @@ is asynchronous: you start it, then **poll `routing24_status`**.
 
 Most of `OptimizeInput` is free. The fields below need a paid Routing24 plan;
 everything not listed — addresses, loads, time windows (**including multi-day
-`+1` offsets**), shifts, costs, capacity, `max_reloads` — works on every
-account.
+`+1` offsets**), shifts, capacity, `max_reloads` and every `cost` field the
+table does not name — works on every account.
 
 | Capability | Plan | Fields |
 | --- | --- | --- |
@@ -247,7 +247,7 @@ Load these only as the task calls for them (progressive disclosure):
 
 ## Version & keeping current
 
-- This skill is **version 1.1.0**. Its bundled reference
+- This skill is **version 1.1.1**. Its bundled reference
   (`references/api.md` + `references/schema.json`) is generated from Routing24's
   own types and is correct as of this version.
 - The **always-current** copy of the full contract is served at
