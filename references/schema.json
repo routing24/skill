@@ -139,11 +139,22 @@
           "transfer_id": {
             "type": "string"
           },
+          "load_class": {
+            "type": "string"
+          },
           "sequence_group": {
             "type": "string"
           },
           "sequence_rank": {
             "type": "number"
+          },
+          "max_time_in_vehicle_s": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "max_ride_overtime_s": {
+            "type": "integer",
+            "minimum": 0
           },
           "id": {
             "type": "string"
@@ -209,6 +220,12 @@
           "period_driven_s": {
             "type": "number"
           },
+          "no_mix_load_classes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LoadClassGroup"
+            }
+          },
           "id": {
             "type": "string"
           },
@@ -264,10 +281,20 @@
             "type": "number",
             "minimum": 0,
             "description": "Surcharge per hour of overtime, paired with the vehicle's\n`max_overtime_s` cap. When overtime is allowed and this is unset, it\ndefaults to the `duration` rate (or a nominal 1/hour if that is 0)\nso allowed overtime is never free; an explicit 0 makes it free."
+          },
+          "ride_overtime": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Cost per hour of a linked (pickup & delivery) order's ride time\ninside its overtime band (`max_ride_overtime_s`, past\n`max_time_in_vehicle_s`). Unset/0 => that band is free."
+          },
+          "load_distance": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Cost per unit of load carried per km (or per mile when the plan's\ndisplay unit is miles): every leg charges the load on board times\nthe leg's length, so heavier cargo is priced onto shorter paths\nand dropped early. Models load-dependent fuel/energy burn and\nrefrigerated (cold chain) running cost. Counts toward the fleet's\n\"priced\" signal like `distance`/`duration`. Unset/0 => carriage\nis free."
           }
         },
         "required": [],
-        "description": "Per-vehicle cost rates. An omitted field means 0. Exception: when NO\nvehicle in the fleet has a nonzero `distance` or `duration` rate, the\noptimizer falls back to minimizing plain travel distance (so an\nall-blank fleet still gets sensible routes); setting every cost to an\nexplicit 0 triggers the same fallback plus a warning. An explicit 0 is\nmeaningful in a mixed fleet (e.g. a bike with free mileage next to a\npriced van)."
+        "description": "Per-vehicle cost rates. An omitted field means 0. Exception: when NO\nvehicle in the fleet has a nonzero `distance`, `duration` or\n`load_distance` rate, the\noptimizer falls back to minimizing plain travel distance (so an\nall-blank fleet still gets sensible routes); setting every cost to an\nexplicit 0 triggers the same fallback plus a warning. An explicit 0 is\nmeaningful in a mixed fleet (e.g. a bike with free mileage next to a\npriced van)."
       },
       "VehicleBreakRule": {
         "type": "object",
@@ -304,6 +331,20 @@
           }
         },
         "required": []
+      },
+      "LoadClassGroup": {
+        "type": "object",
+        "properties": {
+          "classes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "classes"
+        ]
       },
       "OptimizeStarted": {
         "type": "object",
@@ -732,6 +773,14 @@
           "stop": {
             "type": "number",
             "description": "Per-stop cost addend inside `total` (absent when no vehicle prices stops)."
+          },
+          "rideOvertime": {
+            "type": "number",
+            "description": "Cost of the linked orders' ride time inside their overtime band, at the\nserving vehicle's `cost.ride_overtime` — an addend inside `vehicle`\n(absent when no route ran into a priced band)."
+          },
+          "loadDistance": {
+            "type": "number",
+            "description": "Carriage cost: load on board times leg length, summed over legs, at\neach serving vehicle's `cost.load_distance` — an addend inside\n`vehicle` (absent when no vehicle prices load-distance)."
           }
         },
         "required": [
@@ -840,6 +889,13 @@
           "dimension": {
             "type": "number",
             "description": "Capacity dimension index (`capacity` problems only)."
+          },
+          "classes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Conflicting load-class names (`incompatible_load_class` only)."
           }
         },
         "required": [
@@ -887,6 +943,15 @@
           },
           {
             "const": "sequence"
+          },
+          {
+            "const": "incompatible_load_class"
+          },
+          {
+            "const": "shelf_life"
+          },
+          {
+            "const": "field_not_applicable"
           }
         ],
         "description": "Constraint kinds a problem can report (common.fbs `ConstraintType`).\n`amount` units: seconds for the time kinds, load units for `capacity`,\ndistance for `max_distance`."
@@ -909,6 +974,14 @@
           "stop": {
             "type": "number",
             "description": "Per-stop cost addend inside `total` (absent when the vehicle has no stop cost)."
+          },
+          "rideOvertime": {
+            "type": "number",
+            "description": "Cost of this route's linked orders' ride time inside their overtime\nband, at the vehicle's `cost.ride_overtime` — an addend inside `vehicle`\n(absent when the route ran into no priced band)."
+          },
+          "loadDistance": {
+            "type": "number",
+            "description": "This route's carriage cost: load on board times leg length, summed\nover legs, at the vehicle's `cost.load_distance` — an addend inside\n`vehicle` (absent when the vehicle prices no load-distance)."
           }
         },
         "required": [

@@ -24,7 +24,7 @@ compatibility: >-
   API key is needed, and no sign-in: the full flow works anonymously.
 metadata:
   author: Routinghub LLC
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # Routing24 route optimizer
@@ -76,12 +76,15 @@ account.
 | Alternative pickup/delivery locations | PRO | `group` |
 | Driver breaks & driving limits | PRO | `break_rules`, `fixed_breaks`, `period_driving_limit_s`, `period_driven_s` |
 | Force allow / deny orders | PRO | `force_allow_sites`, `force_deny_sites` |
+| Load-distance cost (cost per load-km) | PRO | `cost.load_distance` |
 | Max distance | PRO | `max_distance` |
 | Max duration | PRO | `max_duration_s` |
 | Max overtime | PRO | `max_overtime_s` |
+| Max time in vehicle (shelf life) | PRO | `max_time_in_vehicle_s`, `max_ride_overtime_s`, `cost.ride_overtime` |
 | Order sequences | PRO | `sequence_group`, `sequence_rank` |
 | Overtime cost per hour | PRO | `cost.overtime` |
 | Pickup & delivery (transfers) | PRO | `transfer_type`, `transfer_id` |
+| Product segregation (load classes) | PRO | `load_class`, `no_mix_load_classes` |
 | Reload depots | PRO | `reload_depots` |
 | Skills (vehicle & order tags) | PRO | `required_tags`, `forbidden_tags`, `tags` |
 
@@ -244,7 +247,7 @@ Load these only as the task calls for them (progressive disclosure):
 
 ## Version & keeping current
 
-- This skill is **version 1.0.0**. Its bundled reference
+- This skill is **version 1.1.0**. Its bundled reference
   (`references/api.md` + `references/schema.json`) is generated from Routing24's
   own types and is correct as of this version.
 - The **always-current** copy of the full contract is served at
@@ -328,7 +331,8 @@ Load these only as the task calls for them (progressive disclosure):
   its `before`/`after` anchor.
 - **Units**: `max_distance` (vehicle constraint) and every returned distance
   use the plan's display unit (`distanceUnit`: km or mi); `cost.duration` and
-  `cost.overtime` are per hour; all times are seconds-since-midnight.
+  `cost.overtime` are per hour; `cost.load_distance` is per load unit per
+  km/mi; all times are seconds-since-midnight.
 - **Vehicle cost inputs: omit, don't zero.** An omitted cost field is 0. When
   the user gives no rates at all, send no `cost` objects — the optimizer then
   minimizes plain travel distance. Never write `cost: { distance: 0,

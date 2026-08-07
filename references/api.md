@@ -1,6 +1,6 @@
 # Routing24 route optimizer — API reference
 
-> Generated from Routing24's own types (skill version 1.0.0). The
+> Generated from Routing24's own types (skill version 1.1.0). The
 > always-current copy is served at https://routing24.com/llms.txt.
 
 WebMCP tools registered on `document.modelContext` on every
@@ -83,8 +83,11 @@ type OptimizeStop = {
     group?: string;  // PRO: Alternative order groups, Alternative pickup/delivery locations
     transfer_type?: "pickup" | "delivery" | "depot";  // PRO: Pickup & delivery (transfers)
     transfer_id?: string;  // PRO: Pickup & delivery (transfers)
+    load_class?: string;  // PRO: Product segregation (load classes)
     sequence_group?: string;  // PRO: Order sequences
     sequence_rank?: number;  // PRO: Order sequences
+    max_time_in_vehicle_s?: integer;  // PRO: Max time in vehicle (shelf life) — >= 0
+    max_ride_overtime_s?: integer;  // PRO: Max time in vehicle (shelf life) — >= 0
     id?: string;
 };
 ```
@@ -98,7 +101,7 @@ type OptimizeVehicle = {
     tw_late_s?: number;
     capacity?: number;
     available_count?: number;
-    cost?: { fixed?: number; distance?: number; duration?: number; stop?: number; overtime?: number };  // PRO: Overtime cost per hour (cost.overtime)
+    cost?: { fixed?: number; distance?: number; duration?: number; stop?: number; overtime?: number; ride_overtime?: number; load_distance?: number };  // PRO: Load-distance cost (cost per load-km) (cost.load_distance), Max time in vehicle (shelf life) (cost.ride_overtime), Overtime cost per hour (cost.overtime)
     start_late_s?: number;
     tags?: string[];  // PRO: Skills (vehicle & order tags)
     max_reloads?: number;
@@ -109,6 +112,7 @@ type OptimizeVehicle = {
     fixed_breaks?: { tw_early_s?: number; tw_late_s?: number; duration_s?: number }[];  // PRO: Driver breaks & driving limits
     period_driving_limit_s?: number;  // PRO: Driver breaks & driving limits
     period_driven_s?: number;  // PRO: Driver breaks & driving limits
+    no_mix_load_classes?: { classes: string[] }[];  // PRO: Product segregation (load classes)
     id?: string;
     force_allow_sites?: string[];  // PRO: Force allow / deny orders — Stop ids ONLY this-typed vehicles may serve (pinned compatibility).
     force_deny_sites?: string[];  // PRO: Force allow / deny orders — Stop ids this vehicle type must never serve.
@@ -150,13 +154,42 @@ type PaidFeatureReport = {
   ONE vehicle, in non-decreasing `sequence_rank` order (other stops may come
   between them). Plain stops only (no transfers, no `group`), one service
   window each, 2..16 stops per group.
+- **Product segregation**: give stops a `load_class` and vehicles
+  `no_mix_load_classes` — groups of class names; two classes of one group
+  never ride together on that vehicle's route (reload trips included). Groups
+  are independent; a class no stop carries is ignored; at most 64 distinct classes per task.
+  Both ends of a transfer carry the same class.
+- **Shelf life**: on a plain stop `max_time_in_vehicle_s` bounds the time
+  from its `release_time_s` to the start of service — the clock is PINNED
+  at `release_time_s`, there is no departure-relative form, so a stop
+  without one is measured from the start of the planning horizon (0), which
+  is stricter, not looser: **always send `release_time_s` with it**. A stop
+  whose `tw_early_s` is later than `release_time_s` + the bound cannot be
+  served at all and rejects the whole call, as does a plain stop carrying a
+  `pickup` load (the bound covers `delivery` goods, on board from the
+  depot). On a linked (pickup & delivery)
+  stop it instead bounds the ride time from pickup to delivery (waiting
+  counts; a reload does not reset it) — set identically on every end of the
+  transfer: ends that disagree do NOT reject the call, they are dropped from
+  the solve together, so the plan comes back without them and they appear in
+  no route and in no `unassigned` list.
+  `max_ride_overtime_s` (linked stops only, requires
+  `max_time_in_vehicle_s`, priced at the vehicle's `cost.ride_overtime`)
+  allows a priced band of ride time past the bound; beyond it the bound is
+  hard. On a plain (depot) stop the field does not apply: that stop is left
+  unassigned with a reason, rather than rejecting the call. A bounded LINKED stop cannot be combined with driver breaks: any
+  `break_rules`/`fixed_breaks` on any vehicle rejects the call. Violations
+  report as `shelf_life`.
 - Vehicle `force_allow_sites`/`force_deny_sites`/`reload_depots` reference the
   stop/depot ids **from this request**; unknown ids reject the call.
   `max_distance` is in the plan's display unit (km/mi); `cost.duration` and
   `cost.overtime` are per hour (`max_overtime_s` caps paid overtime past
   `max_duration_s`).
 - **Vehicle costs**: `cost.distance` is per km/mi (the plan's display unit),
-  `cost.fixed` per vehicle used. An omitted cost field means 0. To simply
+  `cost.fixed` per vehicle used, `cost.load_distance` per unit of load
+  carried per km/mi (every leg charges the load on board times the leg
+  length — load-dependent fuel/refrigeration burn; it counts as pricing the
+  fleet like `cost.distance`). An omitted cost field means 0. To simply
   minimize travel distance, **omit `cost` entirely — do not send zeros**: a
   fleet whose every distance/duration rate is 0 has nothing to optimize, so
   the zeros are ignored, plain distance is minimized, and the result carries a
@@ -175,6 +208,8 @@ type PaidFeatureReport = {
   driver) caps the route's total driving time (EU week = 201600, US 7-day = 216000).
   Stops/depot take `no_break: true` to forbid hosting a break there.
   Planned breaks come back as `type:"break"` stops in `routing24_solution`.
+  Breaks and a ride-bounded transfer are mutually exclusive in one call: see
+  **Shelf life** above.
 
 ### `routing24_status` → `OptimizeStatus`
 No input. Snapshot of the current optimization — poll (~every 3s) while solving.
@@ -306,6 +341,8 @@ type SolutionCost = {
     overtime: number;  // Overtime premium — a breakdown line already inside `total`.
     vehicle: number;  // `total` minus `overtime`.
     stop?: number;  // Per-stop cost addend inside `total` (absent when no vehicle prices stops).
+    rideOvertime?: number;  // Cost of the linked orders' ride time inside their overtime band, at the serving vehicle's `cost.ride_overtime` — an addend inside `vehicle` (absent when no route ran into a priced band).
+    loadDistance?: number;  // Carriage cost: load on board times leg length, summed over legs, at each serving vehicle's `cost.load_distance` — an addend inside `vehicle` (absent when no vehicle prices load-distance).
 };
 ```
 ```ts
@@ -316,6 +353,8 @@ type RouteCost = {
     overtime: number;  // Overtime premium inside `total`.
     vehicle: number;  // `total` minus `overtime`.
     stop?: number;  // Per-stop cost addend inside `total` (absent when the vehicle has no stop cost).
+    rideOvertime?: number;  // Cost of this route's linked orders' ride time inside their overtime band, at the vehicle's `cost.ride_overtime` — an addend inside `vehicle` (absent when the route ran into no priced band).
+    loadDistance?: number;  // This route's carriage cost: load on board times leg length, summed over legs, at the vehicle's `cost.load_distance` — an addend inside `vehicle` (absent when the vehicle prices no load-distance).
 };
 ```
 ```ts
@@ -333,9 +372,10 @@ type SolverObjective = {
 ```ts
 // One constraint problem (common.fbs `Problem`).
 type PlanProblem = {
-    type: "capacity" | "max_distance" | "vehicle_incompatible" | "unreachable" | "time_window" | "max_duration" | "depot_time_window" | "shift_window" | "precedence" | "driving_allowance" | "break_schedule" | "break_location" | "sequence";
+    type: "capacity" | "max_distance" | "vehicle_incompatible" | "unreachable" | "time_window" | "max_duration" | "depot_time_window" | "shift_window" | "precedence" | "driving_allowance" | "break_schedule" | "break_location" | "sequence" | "incompatible_load_class" | "shelf_life" | "field_not_applicable";
     amount?: number;  // How far over the constraint (see {@link PlanProblemType} for units).
     dimension?: number;  // Capacity dimension index (`capacity` problems only).
+    classes?: string[];  // Conflicting load-class names (`incompatible_load_class` only).
 };
 ```
 ```ts
