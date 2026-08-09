@@ -24,7 +24,7 @@ compatibility: >-
   API key is needed, and no sign-in: the full flow works anonymously.
 metadata:
   author: Routinghub LLC
-  version: "1.1.1"
+  version: "1.2.1"
 ---
 
 # Routing24 route optimizer
@@ -247,7 +247,7 @@ Load these only as the task calls for them (progressive disclosure):
 
 ## Version & keeping current
 
-- This skill is **version 1.1.1**. Its bundled reference
+- This skill is **version 1.2.1**. Its bundled reference
   (`references/api.md` + `references/schema.json`) is generated from Routing24's
   own types and is correct as of this version.
 - The **always-current** copy of the full contract is served at

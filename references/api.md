@@ -1,6 +1,6 @@
 # Routing24 route optimizer — API reference
 
-> Generated from Routing24's own types (skill version 1.1.1). The
+> Generated from Routing24's own types (skill version 1.2.1). The
 > always-current copy is served at https://routing24.com/llms.txt.
 
 WebMCP tools registered on `document.modelContext` on every
@@ -180,9 +180,13 @@ type PaidFeatureReport = {
   `max_time_in_vehicle_s`, priced at the vehicle's `cost.ride_overtime`)
   allows a priced band of ride time past the bound; beyond it the bound is
   hard. On a plain (depot) stop the field does not apply: that stop is left
-  unassigned with a reason, rather than rejecting the call. A bounded LINKED stop cannot be combined with driver breaks: any
-  `break_rules`/`fixed_breaks` on any vehicle rejects the call. Violations
-  report as `shelf_life`.
+  unassigned with a reason, rather than rejecting the call. A bounded
+  LINKED stop combines with driver breaks: break placement avoids the
+  pickup-to-delivery span where it can, and a break placed inside it
+  counts as ride time, priced against the bound and its band. On a solve,
+  a pair whose ride cannot fit bound + band around the mandated breaks is
+  simply not served: both ends come back in `unassigned`. `shelf_life`
+  problem rows appear only on evaluated or manually edited routes.
 - Vehicle `force_allow_sites`/`force_deny_sites`/`reload_depots` reference the
   stop/depot ids **from this request**; unknown ids reject the call.
   `max_distance` is in the plan's display unit (km/mi); `cost.duration` and
@@ -209,10 +213,13 @@ type PaidFeatureReport = {
   must START inside `[tw_early_s, tw_late_s]`. Carry-in allowance:
   `period_driving_limit_s` minus `period_driven_s` (externally tracked, per
   driver) caps the route's total driving time (EU week = 201600, US 7-day = 216000).
-  Stops/depot take `no_break: true` to forbid hosting a break there.
+  Stops/depot take `no_break: true` to forbid hosting a break there; if no
+  allowed host exists the break is placed there anyway and the route
+  reports a `break_location` problem. Breaks never interrupt a travel
+  leg: a single leg longer than `max_driving_s` cannot be repaired and
+  reports `break_schedule`.
   Planned breaks come back as `type:"break"` stops in `routing24_solution`.
-  Breaks and a ride-bounded transfer are mutually exclusive in one call: see
-  **Shelf life** above.
+  Breaks combine with ride-bounded transfers: see **Shelf life** above.
 
 ### `routing24_status` → `OptimizeStatus`
 No input. Snapshot of the current optimization — poll (~every 3s) while solving.
@@ -446,6 +453,13 @@ type OptimizedDrift = {
   stop adds to its route. Both are estimates for the CURRENT arrangement —
   never sum them, and refresh via `refresh_diagnostics` when
   `diagnosticsStale`.
+- `PlanProblem` codes worth decoding: `break_schedule` = the driver-break
+  rules could not be met (typically a single leg longer than the driving
+  trigger); `break_location` = a break had to be placed at a `no_break`
+  stop; `shelf_life` = a ride ran past `max_time_in_vehicle_s` + band on an
+  evaluated or edited route (a solve drops such pairs to `unassigned`
+  instead); `field_not_applicable` = an intrinsic mismatch (e.g.
+  `max_ride_overtime_s` on a plain stop), reads as an unassigned reason.
 - Two registers, never mixed: `cost` is MONEY (the task's unit costs;
   `cost.overtime` is a line inside `cost.total`, not an addend) and
   coverage is a COUNT (`unassignedCount`/`unassigned`). `objective` is the
