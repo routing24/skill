@@ -2,351 +2,34 @@
   "version": "3.1",
   "components": {
     "schemas": {
-      "OptimizeInput": {
+      "NewPlanInput": {
         "type": "object",
         "properties": {
-          "depot": {
-            "$ref": "#/components/schemas/OptimizeDepot",
-            "description": "Single depot, used as both start and end for every vehicle."
+          "name": {
+            "type": "string",
+            "description": "Plan display name; omitted = \"Route plan <date> <time>\"."
+          }
+        },
+        "required": [],
+        "description": "Input for `routing24_new_plan`: commit a fresh EMPTY plan, replacing the\nloaded one (the app asks the user to confirm when the loaded plan holds\ndata, and unsaved changes are auto-saved first). Follow with the\n`routing24_upsert_*` tools to create the depot/vehicles/stops, then solve\nwith `routing24_reoptimize_plan`."
+      },
+      "NewPlanResult": {
+        "type": "object",
+        "properties": {
+          "created": {
+            "const": true
           },
-          "stops": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/OptimizeStop"
-            },
-            "minItems": 1
-          },
-          "vehicles": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/OptimizeVehicle"
-            },
-            "minItems": 1
-          },
-          "options": {
-            "type": "object",
-            "properties": {
-              "time_limit_s": {
-                "type": "integer",
-                "minimum": 1,
-                "description": "Solve budget in seconds; omit to auto-scale with problem size."
-              }
-            },
-            "required": []
+          "planUuid": {
+            "type": "string"
           }
         },
         "required": [
-          "depot",
-          "stops",
-          "vehicles"
-        ]
+          "created",
+          "planUuid"
+        ],
+        "description": "Result of `routing24_new_plan`: the fresh empty plan is now the loaded one."
       },
-      "OptimizeDepot": {
-        "type": "object",
-        "properties": {
-          "lat": {
-            "type": "number"
-          },
-          "lng": {
-            "type": "number"
-          },
-          "address": {
-            "type": "string"
-          },
-          "tw_early_s": {
-            "type": "number"
-          },
-          "tw_late_s": {
-            "type": "number"
-          },
-          "service_duration_s": {
-            "type": "number"
-          },
-          "no_break": {
-            "type": "boolean"
-          },
-          "id": {
-            "type": "string"
-          }
-        },
-        "required": [],
-        "description": "The single depot: a place plus depot constraints (open window, handling)."
-      },
-      "OptimizeStop": {
-        "type": "object",
-        "properties": {
-          "lat": {
-            "type": "number"
-          },
-          "lng": {
-            "type": "number"
-          },
-          "address": {
-            "type": "string"
-          },
-          "tw_early_s": {
-            "type": "number"
-          },
-          "tw_late_s": {
-            "type": "number"
-          },
-          "service_duration_s": {
-            "type": "number"
-          },
-          "no_break": {
-            "type": "boolean"
-          },
-          "pickup": {
-            "type": "number"
-          },
-          "delivery": {
-            "type": "number"
-          },
-          "release_time_s": {
-            "type": "number"
-          },
-          "priority": {
-            "type": "number"
-          },
-          "required_tags": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "forbidden_tags": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "group": {
-            "type": "string"
-          },
-          "transfer_type": {
-            "oneOf": [
-              {
-                "const": "pickup"
-              },
-              {
-                "const": "delivery"
-              },
-              {
-                "const": "depot"
-              }
-            ]
-          },
-          "transfer_id": {
-            "type": "string"
-          },
-          "load_class": {
-            "type": "string"
-          },
-          "sequence_group": {
-            "type": "string"
-          },
-          "sequence_rank": {
-            "type": "number"
-          },
-          "max_time_in_vehicle_s": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "max_ride_overtime_s": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "id": {
-            "type": "string"
-          }
-        },
-        "required": [],
-        "description": "A delivery/pickup stop: a place plus solver site constraints."
-      },
-      "OptimizeVehicle": {
-        "type": "object",
-        "properties": {
-          "tw_early_s": {
-            "type": "number"
-          },
-          "tw_late_s": {
-            "type": "number"
-          },
-          "capacity": {
-            "type": "number"
-          },
-          "available_count": {
-            "type": "number"
-          },
-          "cost": {
-            "$ref": "#/components/schemas/solver.VehicleCost"
-          },
-          "start_late_s": {
-            "type": "number"
-          },
-          "tags": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "max_reloads": {
-            "type": "number"
-          },
-          "max_duration_s": {
-            "type": "number"
-          },
-          "max_overtime_s": {
-            "type": "number"
-          },
-          "max_distance": {
-            "type": "number"
-          },
-          "break_rules": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/VehicleBreakRule"
-            }
-          },
-          "fixed_breaks": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/VehicleFixedBreak"
-            }
-          },
-          "period_driving_limit_s": {
-            "type": "number"
-          },
-          "period_driven_s": {
-            "type": "number"
-          },
-          "no_mix_load_classes": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/LoadClassGroup"
-            }
-          },
-          "id": {
-            "type": "string"
-          },
-          "force_allow_sites": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Stop ids ONLY this-typed vehicles may serve (pinned compatibility)."
-          },
-          "force_deny_sites": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Stop ids this vehicle type must never serve."
-          },
-          "reload_depots": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Depot ids where mid-route reloads may happen (multi-trip). Omitted =\nsingle-trip unless `max_reloads` is set (then the home depot is used);\npair with `max_reloads` to cap trips."
-          }
-        },
-        "required": [],
-        "description": "A vehicle (type): solver vehicle constraints; `available_count` clones this\ntype. The three reference lists take **stop/depot ids** (as passed in this\nrequest) and mirror task.fbs `Vehicle.force_allow_sites` /\n`force_deny_sites` / `reload_depots`."
-      },
-      "solver.VehicleCost": {
-        "type": "object",
-        "properties": {
-          "fixed": {
-            "type": "number",
-            "minimum": 0,
-            "description": "Cost per use of the vehicle; charged only when it drives a route."
-          },
-          "distance": {
-            "type": "number",
-            "minimum": 0,
-            "description": "Cost per km (or per mile when the plan's display unit is miles)."
-          },
-          "duration": {
-            "type": "number",
-            "minimum": 0,
-            "description": "Cost per hour of route time."
-          },
-          "stop": {
-            "type": "number",
-            "minimum": 0,
-            "description": "Cost per stop served (each order visit; a transfer pair counts its\npickup and delivery separately). Depot and reload visits are free.\nNo unit conversion: charged per visit in your cost units."
-          },
-          "overtime": {
-            "type": "number",
-            "minimum": 0,
-            "description": "Surcharge per hour of overtime, paired with the vehicle's\n`max_overtime_s` cap. When overtime is allowed and this is unset, it\ndefaults to the `duration` rate (or a nominal 1/hour if that is 0)\nso allowed overtime is never free; an explicit 0 makes it free."
-          },
-          "ride_overtime": {
-            "type": "number",
-            "minimum": 0,
-            "description": "Cost per hour of a linked (pickup & delivery) order's ride time\ninside its overtime band (`max_ride_overtime_s`, past\n`max_time_in_vehicle_s`). Unset/0 => that band is free."
-          },
-          "load_distance": {
-            "type": "number",
-            "minimum": 0,
-            "description": "Cost per unit of load carried per km (or per mile when the plan's\ndisplay unit is miles): every leg charges the load on board times\nthe leg's length, so heavier cargo is priced onto shorter paths\nand dropped early. Models load-dependent fuel/energy burn and\nrefrigerated (cold chain) running cost. Counts toward the fleet's\n\"priced\" signal like `distance`/`duration`. Unset/0 => carriage\nis free."
-          }
-        },
-        "required": [],
-        "description": "Per-vehicle cost rates. An omitted field means 0. Exception: when NO\nvehicle in the fleet has a nonzero `distance`, `duration` or\n`load_distance` rate, the\noptimizer falls back to minimizing plain travel distance (so an\nall-blank fleet still gets sensible routes); setting every cost to an\nexplicit 0 triggers the same fallback plus a warning. An explicit 0 is\nmeaningful in a mixed fleet (e.g. a bike with free mileage next to a\npriced van)."
-      },
-      "VehicleBreakRule": {
-        "type": "object",
-        "properties": {
-          "max_driving_s": {
-            "type": "number"
-          },
-          "duration_s": {
-            "type": "number"
-          },
-          "split_first_s": {
-            "type": "number"
-          },
-          "split_second_s": {
-            "type": "number"
-          },
-          "service_counts": {
-            "type": "boolean"
-          }
-        },
-        "required": []
-      },
-      "VehicleFixedBreak": {
-        "type": "object",
-        "properties": {
-          "tw_early_s": {
-            "type": "number"
-          },
-          "tw_late_s": {
-            "type": "number"
-          },
-          "duration_s": {
-            "type": "number"
-          }
-        },
-        "required": []
-      },
-      "LoadClassGroup": {
-        "type": "object",
-        "properties": {
-          "classes": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "classes"
-        ]
-      },
-      "OptimizeStarted": {
+      "SolveStarted": {
         "type": "object",
         "properties": {
           "started": {
@@ -354,6 +37,10 @@
           },
           "planUuid": {
             "type": "string"
+          },
+          "solveRun": {
+            "type": "number",
+            "description": "1-based counter of solve launches in this session. Each launch is a NEW\nrun even when the request repeats — two identical re-optimizes are two\ndistinct solves, and this field is what makes their results distinct."
           },
           "paidFeatures": {
             "$ref": "#/components/schemas/PaidFeatureReport",
@@ -365,13 +52,18 @@
               "type": "string"
             },
             "description": "Non-blocking notes about how the request was interpreted (e.g. an\nall-zero cost model replaced by the plain-distance default). Omitted\nwhen there is nothing to say."
+          },
+          "timeLimitS": {
+            "type": "number",
+            "description": "The solver's time budget for this run, in seconds (`options.time_limit_s`\nor the size-based default). Geocoding and matrix time come on top, so the\nrun lands shortly after this many seconds of solving."
           }
         },
         "required": [
           "started",
-          "planUuid"
+          "planUuid",
+          "solveRun"
         ],
-        "description": "Result of `routing24_optimize`: the solve is running, poll for progress."
+        "description": "Result of `routing24_reoptimize_plan`: the solve is running, poll for progress."
       },
       "PaidFeatureReport": {
         "type": "object",
@@ -400,60 +92,7 @@
           "stripped",
           "freeRunsLeft"
         ],
-        "description": "What `routing24_optimize` did with the paid features the plan uses. Absent\nwhen the plan uses none, or when every one of them is included in the user's\nsubscription — the common case, and nothing to report."
-      },
-      "GeocodeInput": {
-        "type": "object",
-        "properties": {
-          "addresses": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Address strings to geocode (free-form, as a user would type them)."
-          }
-        },
-        "required": [
-          "addresses"
-        ],
-        "description": "Input for the `routing24_geocode` WebMCP tool."
-      },
-      "GeocodeResult": {
-        "type": "object",
-        "properties": {
-          "input": {
-            "type": "string",
-            "description": "The address string as passed in."
-          },
-          "ok": {
-            "type": "boolean"
-          },
-          "matched": {
-            "type": "string",
-            "description": "Canonical/expanded address the geocoder matched."
-          },
-          "lat": {
-            "type": "number"
-          },
-          "lng": {
-            "type": "number"
-          },
-          "quality": {
-            "oneOf": [
-              {
-                "const": "rooftop"
-              },
-              {
-                "const": "failed"
-              }
-            ]
-          }
-        },
-        "required": [
-          "input",
-          "ok",
-          "quality"
-        ]
+        "description": "What the solve did with the paid features the plan uses. Absent when the\nplan uses none, or when every one of them is included in the user's\nsubscription — the common case, and nothing to report."
       },
       "OptimizeStatus": {
         "type": "object",
@@ -479,6 +118,10 @@
           },
           "unassignedCount": {
             "type": "number"
+          },
+          "unassignedSummary": {
+            "type": "string",
+            "description": "One-line WHY for a nonzero `unassignedCount` (from the last computed\ndiagnostics), so every status poll keeps the reasons one hop away. The\nper-stop reasons, numeric targets and fixes come from\n`routing24_unassigned`."
           },
           "distance": {
             "type": "number"
@@ -509,6 +152,41 @@
           },
           "planUuid": {
             "type": "string"
+          },
+          "complete": {
+            "type": "boolean",
+            "description": "True when the solve ran to completion (not cancelled part-way)."
+          },
+          "cost": {
+            "$ref": "#/components/schemas/SolutionCost",
+            "description": "Economic cost (money) of the whole plan. Coverage is `unassignedCount`,\nnever a cost. Absent on pre-feature solutions."
+          },
+          "objective": {
+            "$ref": "#/components/schemas/SolverObjective",
+            "description": "Solver comparison scalar — see {@link SolverObjective}; never money."
+          },
+          "routeStats": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RouteBrief"
+            },
+            "description": "One compact entry per route (empty routes included), in on-screen order:\nvehicle, stop count, distance, duration, feasibility and cost per route —\nNO stop list. Drill into one route's ordered stops with `routing24_route`."
+          },
+          "revision": {
+            "type": "number",
+            "description": "Session revision the routes reflect (present once an editing session is\nopen); bumps on every committed edit."
+          },
+          "undoDepth": {
+            "type": "number",
+            "description": "Committed edits `routing24_undo` can walk back."
+          },
+          "redoDepth": {
+            "type": "number",
+            "description": "Undone edits `routing24_redo` can re-apply."
+          },
+          "dataSync": {
+            "$ref": "#/components/schemas/DataSyncStatus",
+            "description": "Present ONLY when the plan data (or the distance unit) changed after\nthe last optimization — see {@link DataSyncStatus}."
           }
         },
         "required": [
@@ -613,147 +291,7 @@
           "severity",
           "summary"
         ],
-        "description": "How far the CURRENT plan has drifted from the last full optimization —\ncovering every change since that solve, the user's manual edits included.\nRecompute-free: the baseline is frozen at solve completion; only a new\n`routing24_optimize` (or the user's OPTIMIZE button) resets it. Absent when\nthe plan predates the baseline feature or was never solved.\n\nREPORTING OBLIGATION: when `severity` is `degraded` or `severe`, tell the\nuser (quote `summary`) and offer to fix it — `routing24_optimize_route` for\na single rough route, or a fresh solve."
-      },
-      "PlanSolution": {
-        "type": "object",
-        "properties": {
-          "available": {
-            "type": "boolean",
-            "description": "`false` when the loaded plan carries no optimized solution yet."
-          },
-          "planUuid": {
-            "type": "string"
-          },
-          "planUrl": {
-            "type": "string",
-            "description": "Absolute URL of the plan's optimize page."
-          },
-          "feasible": {
-            "type": "boolean",
-            "description": "True when every constraint is satisfied."
-          },
-          "complete": {
-            "type": "boolean",
-            "description": "True when the solve ran to completion (not cancelled part-way)."
-          },
-          "distanceUnit": {
-            "oneOf": [
-              {
-                "const": "km"
-              },
-              {
-                "const": "mi"
-              }
-            ]
-          },
-          "routeCount": {
-            "type": "number",
-            "description": "Number of routes used."
-          },
-          "stopCount": {
-            "type": "number",
-            "description": "Number of site stops served across all routes."
-          },
-          "unassignedCount": {
-            "type": "number",
-            "description": "Number of site stops that could not be served."
-          },
-          "distance": {
-            "type": "number",
-            "description": "Total travel distance across all routes, in `distanceUnit`."
-          },
-          "durationHours": {
-            "type": "number",
-            "description": "Total duration across all routes, hours."
-          },
-          "unassigned": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Ids of the sites left unassigned, if any."
-          },
-          "cost": {
-            "$ref": "#/components/schemas/SolutionCost",
-            "description": "Economic cost (money). Coverage is `unassignedCount`, never a cost."
-          },
-          "objective": {
-            "$ref": "#/components/schemas/SolverObjective",
-            "description": "Solver comparison scalar — see {@link SolverObjective}; never money."
-          },
-          "problemsCount": {
-            "type": "number",
-            "description": "Total constraint-problem markers across all routes (0 = feasible)."
-          },
-          "routes": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PlanSolutionRoute"
-            },
-            "description": "One entry per route slot (empty slots included), in slot order."
-          },
-          "revision": {
-            "type": "number",
-            "description": "Session revision the routes reflect; bumps on every committed edit."
-          },
-          "undoDepth": {
-            "type": "number",
-            "description": "Committed edits that `routing24_undo` can walk back."
-          },
-          "redoDepth": {
-            "type": "number",
-            "description": "Undone edits that `routing24_redo` can re-apply."
-          },
-          "userAssigned": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Site ids currently marked user-assigned (manually placed)."
-          },
-          "userUnassigned": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Unassigned site ids that were removed by the user/agent (not the solver)."
-          },
-          "alternativesNotChosen": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Group-alternative sites not chosen (their sibling serves the group)."
-          },
-          "editedAt": {
-            "type": "number",
-            "description": "Last manual-edit timestamp (ms since epoch); absent = never edited."
-          },
-          "diagnosticsStale": {
-            "type": "boolean",
-            "description": "True when `unassignedDiagnostics` predates the latest edits — pass\n`refresh_diagnostics: true` to recompute before reading it."
-          },
-          "unassignedDiagnostics": {
-            "$ref": "#/components/schemas/UnassignedDiagnosticsReport",
-            "description": "Why sites are unassigned, in prose (capped; see `truncated`/`omitted`)."
-          },
-          "insertionQuotes": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/InsertionQuote"
-            },
-            "description": "Ready-to-serve quotes for the unassigned orders (one per quotable\nsite; none when nothing fits). Refreshed with the diagnostics — pass\n`refresh_diagnostics: true` when `diagnosticsStale`."
-          },
-          "driftFromOptimized": {
-            "$ref": "#/components/schemas/OptimizedDrift",
-            "description": "Drift vs the last full optimization (user's manual edits included) —\nwhen `severity` is `degraded`/`severe`, tell the user and offer a fix."
-          }
-        },
-        "required": [
-          "available"
-        ],
-        "description": "The full optimized solution for the currently-loaded plan — whether it was\njust optimized in this tab or opened via its URL. This is the structured data\nbehind {@link OptimizeStatus}: the same rollups plus every route's ordered\nstops. `available` is `false` (and the detail fields are omitted) when the\nloaded plan has no solution yet."
+        "description": "How far the CURRENT plan has drifted from the last full optimization —\ncovering every change since that solve, the user's manual edits included.\nRecompute-free: the baseline is frozen at solve completion; only a new\n`routing24_reoptimize_plan` (or the user's OPTIMIZE button) resets it. Absent when\nthe plan predates the baseline feature or was never solved.\n\nREPORTING OBLIGATION: when `severity` is `degraded` or `severe`, tell the\nuser (quote `summary`) and stop there. An edit the user asked for is\nexpected to cost more — never re-optimize (or propose it) to walk one back;\nre-optimizing is only ever the user's own request."
       },
       "SolutionCost": {
         "type": "object",
@@ -808,22 +346,157 @@
         ],
         "description": "The scalar the solver minimizes — SOLVER UNITS, NOT MONEY, never quote it\nto the user. Each unassigned order carries a synthetic penalty priced\nabove any possible serving cost, so fewer-unassigned always outranks\ncheaper-routes. Use it ONLY to compare two states of the same plan:\nlower `objective.total` = better plan. Equivalent hand rule: fewer\nunassigned wins; ties break on lower `cost.total`."
       },
-      "PlanSolutionRoute": {
+      "RouteBrief": {
         "type": "object",
         "properties": {
-          "slot": {
-            "type": "number",
-            "description": "0-based route slot — the address every `routing24_edit` op (`to_route`,\n`route`, `target`, `sources`) and `routing24_optimize_route` use. Slots\ncompact after `remove_routes`; re-read them from the returned state."
+          "cost": {
+            "$ref": "#/components/schemas/RouteCost",
+            "description": "Economic cost of this route (absent on pre-feature solutions)."
           },
-          "index": {
+          "route": {
             "type": "number",
-            "description": "1-based route number, matching the on-screen order (slot + 1)."
+            "description": "1-based route number, matching the on-screen order — the SAME number\nevery route-addressed tool takes (`routing24_route`,\n`routing24_reoptimize_route`, the `routing24_edit_*` `to_route`/`route`/\n`target`/`sources` fields). Numbers renumber after\n`routing24_edit_remove_routes`;\nre-read them from the returned state."
           },
           "vehicleId": {
             "type": "string",
             "description": "Id of the vehicle serving this route."
           },
-          "siteCount": {
+          "stopCount": {
+            "type": "number",
+            "description": "Count of site stops served (the depot start/end are excluded)."
+          },
+          "distance": {
+            "type": "number",
+            "description": "Total travel distance of the route, in `distanceUnit`."
+          },
+          "durationHours": {
+            "type": "number",
+            "description": "Total route duration (travel + service + wait), hours."
+          },
+          "feasible": {
+            "type": "boolean",
+            "description": "True when every constraint on this route is satisfied."
+          },
+          "problemsCount": {
+            "type": "number",
+            "description": "Constraint-problem markers on this route (0 = feasible); read the\nproblems themselves from `routing24_route`."
+          }
+        },
+        "required": [
+          "route",
+          "stopCount",
+          "distance",
+          "durationHours"
+        ],
+        "description": "One route's compact stats in {@link OptimizeStatus}.`routeStats` — totals\nonly, no stop list. Drill into the ordered stops with `routing24_route(route)`.\nThe shared fields are {@link PlanSolutionRoute}'s, defined once there."
+      },
+      "RouteCost": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number",
+            "description": "Full economic cost of the route: fixed + distance + duration (incl.\novertime) + stop + ride overtime + load-distance."
+          },
+          "overtime": {
+            "type": "number",
+            "description": "Overtime premium inside `total`."
+          },
+          "vehicle": {
+            "type": "number",
+            "description": "`total` minus `overtime`."
+          },
+          "stop": {
+            "type": "number",
+            "description": "Per-stop cost addend inside `total` (absent when the vehicle has no stop cost)."
+          },
+          "rideOvertime": {
+            "type": "number",
+            "description": "Cost of this route's linked orders' ride time inside their overtime\nband, at the vehicle's `cost.ride_overtime` — an addend inside `vehicle`\n(absent when the route ran into no priced band)."
+          },
+          "loadDistance": {
+            "type": "number",
+            "description": "This route's carriage cost: load on board times leg length, summed\nover legs, at the vehicle's `cost.load_distance` — an addend inside\n`vehicle` (absent when the vehicle prices no load-distance)."
+          }
+        },
+        "required": [
+          "total",
+          "overtime",
+          "vehicle"
+        ],
+        "description": "One route's ECONOMIC cost, in the task's money units. Same shape rules as\n{@link SolutionCost}."
+      },
+      "DataSyncStatus": {
+        "type": "object",
+        "properties": {
+          "stops": {
+            "$ref": "#/components/schemas/EntityKindDiff"
+          },
+          "vehicles": {
+            "$ref": "#/components/schemas/EntityKindDiff"
+          },
+          "depots": {
+            "$ref": "#/components/schemas/EntityKindDiff"
+          },
+          "addresses": {
+            "$ref": "#/components/schemas/EntityKindDiff"
+          },
+          "distanceUnitChanged": {
+            "type": "boolean",
+            "description": "The display distance unit changed since the solve (miles <-> km), which\nalone re-prices the solution's distances."
+          }
+        },
+        "required": [],
+        "description": "What changed in the plan data AFTER the last optimization — the same\ncondition that shows the user the NOT SYNC badge. The current solution and\nthe route-editing tools still see the plan as of that solve; the changes\ncounted here take effect on the next optimization (run it only when the\nuser asks). A kind that is absent is unchanged."
+      },
+      "EntityKindDiff": {
+        "type": "object",
+        "properties": {
+          "added": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "removed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "changed": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "added",
+          "removed",
+          "changed"
+        ],
+        "description": "Counts of one entity kind's rows that differ from the last optimization's\nsnapshot of the plan."
+      },
+      "RouteInput": {
+        "type": "object",
+        "properties": {
+          "route": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-based route number from `OptimizeStatus.routeStats[].route` — the\nsame number shown to the user (Route 1 = `route: 1`)."
+          }
+        },
+        "required": [
+          "route"
+        ],
+        "description": "Input for `routing24_route`: one route's full detail by its 1-based `route`\nnumber."
+      },
+      "PlanSolutionRoute": {
+        "type": "object",
+        "properties": {
+          "route": {
+            "type": "number",
+            "description": "1-based route number, matching the on-screen order — the SAME number\nevery route-addressed tool takes (`routing24_route`,\n`routing24_reoptimize_route`, the `routing24_edit_*` `to_route`/`route`/\n`target`/`sources` fields). Numbers renumber after\n`routing24_edit_remove_routes`;\nre-read them from the returned state."
+          },
+          "vehicleId": {
+            "type": "string",
+            "description": "Id of the vehicle serving this route."
+          },
+          "stopCount": {
             "type": "number",
             "description": "Count of site stops served (the depot start/end are excluded)."
           },
@@ -867,14 +540,13 @@
           }
         },
         "required": [
-          "slot",
-          "index",
-          "siteCount",
+          "route",
+          "stopCount",
           "distance",
           "durationHours",
           "stops"
         ],
-        "description": "One route slot: an ordered stop sequence, bounded by depot stops when the\nvehicle has a start/finish depot (open-ended ends start/finish at an order\ninstead). Empty slots (a vehicle with no stops, e.g. just created by\n`create_route`) are included with `siteCount: 0` so `slot` stays a\ncomplete, editable address space."
+        "description": "One route: an ordered stop sequence, bounded by depot stops when the\nvehicle has a start/finish depot (open-ended ends start/finish at an order\ninstead). Empty routes (a vehicle with no stops, e.g. just created by\n`routing24_edit_create_route`) are included with `stopCount: 0` so `route` stays a\ncomplete, editable address space."
       },
       "PlanProblem": {
         "type": "object",
@@ -956,41 +628,6 @@
         ],
         "description": "Constraint kinds a problem can report (common.fbs `ConstraintType`).\n`amount` units: seconds for the time kinds, load units for `capacity`,\ndistance for `max_distance`."
       },
-      "RouteCost": {
-        "type": "object",
-        "properties": {
-          "total": {
-            "type": "number",
-            "description": "Full economic cost of the route: fixed + distance + duration (incl.\novertime) + stop + ride overtime + load-distance."
-          },
-          "overtime": {
-            "type": "number",
-            "description": "Overtime premium inside `total`."
-          },
-          "vehicle": {
-            "type": "number",
-            "description": "`total` minus `overtime`."
-          },
-          "stop": {
-            "type": "number",
-            "description": "Per-stop cost addend inside `total` (absent when the vehicle has no stop cost)."
-          },
-          "rideOvertime": {
-            "type": "number",
-            "description": "Cost of this route's linked orders' ride time inside their overtime\nband, at the vehicle's `cost.ride_overtime` — an addend inside `vehicle`\n(absent when the route ran into no priced band)."
-          },
-          "loadDistance": {
-            "type": "number",
-            "description": "This route's carriage cost: load on board times leg length, summed\nover legs, at the vehicle's `cost.load_distance` — an addend inside\n`vehicle` (absent when the vehicle prices no load-distance)."
-          }
-        },
-        "required": [
-          "total",
-          "overtime",
-          "vehicle"
-        ],
-        "description": "One route's ECONOMIC cost, in the task's money units. Same shape rules as\n{@link SolutionCost}."
-      },
       "PlanSolutionStop": {
         "type": "object",
         "properties": {
@@ -1019,12 +656,6 @@
           "address": {
             "type": "string",
             "description": "Matched street address, when known."
-          },
-          "lat": {
-            "type": "number"
-          },
-          "lng": {
-            "type": "number"
           },
           "arrivalTimeS": {
             "type": "number",
@@ -1089,6 +720,70 @@
           "deliveredLoad",
           "pickedUpLoad"
         ]
+      },
+      "UnassignedInput": {
+        "type": "object",
+        "properties": {
+          "refresh_diagnostics": {
+            "type": "boolean",
+            "description": "Recompute the unassigned-site diagnostics before returning them (runs an\nengine pass; only needed when `diagnosticsStale` was true)."
+          }
+        },
+        "required": [],
+        "description": "Input for `routing24_unassigned`."
+      },
+      "UnassignedReport": {
+        "type": "object",
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "description": "`false` when the loaded plan carries no optimized solution yet."
+          },
+          "unassignedCount": {
+            "type": "number",
+            "description": "Number of site stops that could not be served."
+          },
+          "unassigned": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ids of the unassigned sites, if any."
+          },
+          "alternativesNotChosen": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Group-alternative sites not chosen (a sibling serves the group) — these\nare NOT failures."
+          },
+          "userUnassigned": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Unassigned site ids that were removed by the user/agent (not the solver)."
+          },
+          "diagnosticsStale": {
+            "type": "boolean",
+            "description": "True when `unassignedDiagnostics` predates the latest edits — pass\n`refresh_diagnostics: true` to recompute before reading it."
+          },
+          "unassignedDiagnostics": {
+            "$ref": "#/components/schemas/UnassignedDiagnosticsReport",
+            "description": "Why sites are unassigned, in prose (capped; see `truncated`/`omitted`)."
+          },
+          "insertionQuotes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InsertionQuote"
+            },
+            "description": "Ready-to-serve quotes for the unassigned orders (the cheapest feasible\nplacement for each quotable site; none when nothing fits). Refreshed with\nthe diagnostics — pass `refresh_diagnostics: true` when `diagnosticsStale`."
+          }
+        },
+        "required": [
+          "available"
+        ],
+        "description": "Result of `routing24_unassigned`: which sites of the loaded plan are unserved\nand why. `available` is `false` when the plan has no solution yet."
       },
       "UnassignedDiagnosticsReport": {
         "type": "object",
@@ -1166,11 +861,12 @@
       "InsertionQuote": {
         "type": "object",
         "properties": {
-          "site": {
+          "stop": {
             "type": "string"
           },
-          "routeSlot": {
-            "type": "number"
+          "route": {
+            "type": "number",
+            "description": "1-based route number of the quoted insertion point."
           },
           "vehicleId": {
             "type": "string"
@@ -1191,100 +887,39 @@
           },
           "deliveryAfter": {
             "type": "string",
-            "description": "Pair quote (site = the pickup): where the DELIVERY step is quoted, after\nthe pickup (precedence-aware). Absent for a single order."
+            "description": "Pair quote (stop = the pickup): where the DELIVERY step is quoted, after\nthe pickup (precedence-aware). Absent for a single order."
           }
         },
         "required": [
-          "site",
+          "stop",
           "cost",
           "durationS"
         ],
-        "description": "The cheapest FEASIBLE way to serve one unassigned order in the current\nroutes — REAL units (money / seconds), safe to quote to the user. Directly\nreplayable as a `move_sites` edit: use `before`/`after` as the anchor (or\n`to_route: routeSlot` with `placement: \"best\"` when both are absent).\n`routeSlot` absent = a spare `vehicleId` vehicle serves it on a fresh\nsingle-visit route, its fixed cost included (an existing route's fixed\ncost is sunk and excluded). Estimates for the CURRENT arrangement only:\nquotes are NOT additive across orders and go stale with any edit or\nre-optimize (`diagnosticsStale`)."
+        "description": "The cheapest FEASIBLE way to serve one unassigned order in the current\nroutes — REAL units (money / seconds), safe to quote to the user. Directly\nreplayable with `routing24_edit_move_stops`: use `before`/`after` as the anchor (or\n`to_route: route` with `placement: \"best\"` when both are absent).\n`route` absent = a spare `vehicleId` vehicle serves it on a fresh\nsingle-visit route, its fixed cost included (an existing route's fixed\ncost is sunk and excluded). Estimates for the CURRENT arrangement only:\nquotes are NOT additive across orders and go stale with any edit or\nre-optimize (`diagnosticsStale`)."
       },
-      "SolutionInput": {
+      "EditMoveStopsInput": {
         "type": "object",
         "properties": {
-          "refresh_diagnostics": {
-            "type": "boolean",
-            "description": "Recompute the unassigned-site diagnostics before returning them (runs an\nengine pass; only needed when `diagnosticsStale` was true)."
-          }
-        },
-        "required": [],
-        "description": "Input for `routing24_solution`."
-      },
-      "EditInput": {
-        "type": "object",
-        "properties": {
-          "ops": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/EditOp"
-            },
-            "minItems": 1
-          }
-        },
-        "required": [
-          "ops"
-        ],
-        "description": "Input for `routing24_edit` (edits.fbs `EditBatch`): an ordered batch applied\nALL-OR-NOTHING — the first rejected op rolls the whole batch back. Ops see the\neffects of earlier ops in the same batch (e.g. `create_route` then\n`move_sites` onto the new slot). Revision guarding is handled internally."
-      },
-      "EditOp": {
-        "oneOf": [
-          {
-            "$ref": "#/components/schemas/EditMoveSites"
-          },
-          {
-            "$ref": "#/components/schemas/EditSetRouteVehicle"
-          },
-          {
-            "$ref": "#/components/schemas/EditUnassignSites"
-          },
-          {
-            "$ref": "#/components/schemas/EditMarkUserAssigned"
-          },
-          {
-            "$ref": "#/components/schemas/EditClearUserAssigned"
-          },
-          {
-            "$ref": "#/components/schemas/EditCreateRoute"
-          },
-          {
-            "$ref": "#/components/schemas/EditRemoveRoutes"
-          },
-          {
-            "$ref": "#/components/schemas/EditSplitRoute"
-          },
-          {
-            "$ref": "#/components/schemas/EditMergeRoutes"
-          }
-        ],
-        "description": "One edit operation (edits.fbs `Edit` union; discriminated on `op`)."
-      },
-      "EditMoveSites": {
-        "type": "object",
-        "properties": {
-          "op": {
-            "const": "move_sites"
-          },
-          "sites": {
+          "stops": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "minItems": 1
+            "minItems": 1,
+            "description": "Stop business ids to move, kept together as one block."
           },
           "before": {
             "type": "string",
-            "description": "Anchor site id: insert the block immediately before it."
+            "description": "Anchor stop id: insert the block immediately before it."
           },
           "after": {
             "type": "string",
-            "description": "Anchor site id: insert the block immediately after it."
+            "description": "Anchor stop id: insert the block immediately after it."
           },
           "to_route": {
             "type": "integer",
-            "minimum": 0,
-            "description": "Destination route slot (see `PlanSolutionRoute.slot`)."
+            "minimum": 1,
+            "description": "Destination route number, 1-based (see `OptimizeStatus.routeStats[].route`)."
           },
           "placement": {
             "oneOf": [
@@ -1299,24 +934,42 @@
           },
           "user_assigned": {
             "type": "boolean",
-            "description": "Mark the sites user-assigned (badge + problem report). Default true."
+            "description": "Mark the stops user-assigned (badge + problem report). Default true."
           }
         },
         "required": [
-          "op",
-          "sites"
+          "stops"
         ],
-        "description": "Move `sites` as ONE ordered block (edits.fbs `MoveSites`). Destination is\nexactly one of: `before`/`after` (anchor site id, must be planned and not in\n`sites`), or `to_route` (+ `placement`). Also the way to plan an unassigned\nsite: move it from nowhere onto a route."
+        "description": "Input for `routing24_edit_move_stops`: move/re-plan planned OR unassigned\nstops. Anchor with `before`/`after` (a planned stop id on the destination\nroute), or target a route with `to_route` + `placement`."
       },
-      "EditSetRouteVehicle": {
+      "EditUnassignStopsInput": {
         "type": "object",
         "properties": {
-          "op": {
-            "const": "set_route_vehicle"
+          "stops": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "description": "Stop business ids to remove from their routes."
           },
+          "user_unassigned": {
+            "type": "boolean",
+            "description": "Stamp the \"removed by you\" marker (default true). Pass false to unassign\nwithout claiming the removal, keeping the stop's original reason."
+          }
+        },
+        "required": [
+          "stops"
+        ],
+        "description": "Input for `routing24_edit_unassign_stops`."
+      },
+      "EditSetRouteVehicleInput": {
+        "type": "object",
+        "properties": {
           "route": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 1,
+            "description": "Route number, 1-based (see `OptimizeStatus.routeStats[].route`)."
           },
           "vehicle": {
             "type": "string",
@@ -1324,163 +977,105 @@
           }
         },
         "required": [
-          "op",
           "route",
           "vehicle"
         ],
-        "description": "Rebind a route slot to another fleet vehicle (edits.fbs `SetRouteVehicle`)."
+        "description": "Input for `routing24_edit_set_route_vehicle`."
       },
-      "EditUnassignSites": {
+      "EditCreateRouteInput": {
         "type": "object",
         "properties": {
-          "op": {
-            "const": "unassign_sites"
-          },
-          "sites": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "minItems": 1
-          },
-          "user_unassigned": {
-            "type": "boolean",
-            "description": "Stamp the \"removed by you\" marker (default true). Pass false to unassign\nwithout claiming the removal, keeping the site's original unassigned reason."
-          }
-        },
-        "required": [
-          "op",
-          "sites"
-        ],
-        "description": "Remove sites from their routes into the unassigned list (edits.fbs `UnassignSites`)."
-      },
-      "EditMarkUserAssigned": {
-        "type": "object",
-        "properties": {
-          "op": {
-            "const": "mark_user_assigned"
-          },
-          "sites": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "minItems": 1
-          }
-        },
-        "required": [
-          "op",
-          "sites"
-        ],
-        "description": "Mark already-planned sites user-assigned (badge only; edits.fbs `MarkUserAssigned`)."
-      },
-      "EditClearUserAssigned": {
-        "type": "object",
-        "properties": {
-          "op": {
-            "const": "clear_user_assigned"
-          },
-          "sites": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "minItems": 1
-          }
-        },
-        "required": [
-          "op",
-          "sites"
-        ],
-        "description": "Drop the user-assigned mark + report (\"Dismiss\"; edits.fbs `ClearUserAssigned`)."
-      },
-      "EditCreateRoute": {
-        "type": "object",
-        "properties": {
-          "op": {
-            "const": "create_route"
-          },
           "vehicle": {
-            "type": "string"
+            "type": "string",
+            "description": "Vehicle id for the new empty route (appended last)."
           }
         },
         "required": [
-          "op",
           "vehicle"
         ],
-        "description": "Append an empty route slot for `vehicle` (edits.fbs `CreateRoute`)."
+        "description": "Input for `routing24_edit_create_route`."
       },
-      "EditRemoveRoutes": {
+      "EditRemoveRoutesInput": {
         "type": "object",
         "properties": {
-          "op": {
-            "const": "remove_routes"
-          },
           "routes": {
             "type": "array",
             "items": {
               "type": "integer",
-              "minimum": 0
+              "minimum": 1
             },
-            "minItems": 1
+            "minItems": 1,
+            "description": "Route numbers (1-based) to delete. The remaining routes renumber —\nre-read them after."
           }
         },
         "required": [
-          "op",
           "routes"
         ],
-        "description": "Delete EMPTY route slots (edits.fbs `RemoveRoutes`; `route_not_empty`\notherwise — `unassign_sites` or move the stops first). Remaining slots compact:\nput this op last in the batch and re-read slots from the result."
+        "description": "Input for `routing24_edit_remove_routes`. The stops on those routes are\nunassigned first, in the SAME atomic batch — the engine's own remove op\naccepts empty routes only."
       },
-      "EditSplitRoute": {
+      "EditSplitRouteInput": {
         "type": "object",
         "properties": {
-          "op": {
-            "const": "split_route"
-          },
           "route": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 1,
+            "description": "Route number (1-based) to split."
           },
           "after": {
             "type": "string",
-            "description": "Site id that becomes the last stop of the head route."
+            "description": "Stop id that becomes the last stop of the head route."
           },
           "vehicle": {
-            "type": "string"
+            "type": "string",
+            "description": "Vehicle for the new tail route (defaults to the same vehicle type)."
           }
         },
         "required": [
-          "op",
           "route",
           "after"
         ],
-        "description": "Split a route in two after site `after` (edits.fbs `SplitRoute`). The head\nkeeps the slot + vehicle; the tail becomes a new appended slot served by\n`vehicle` (defaults to the same vehicle type)."
+        "description": "Input for `routing24_edit_split_route`."
       },
-      "EditMergeRoutes": {
+      "EditMergeRoutesInput": {
         "type": "object",
         "properties": {
-          "op": {
-            "const": "merge_routes"
-          },
           "target": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 1,
+            "description": "Route number (1-based) that receives the stops."
           },
           "sources": {
             "type": "array",
             "items": {
               "type": "integer",
-              "minimum": 0
+              "minimum": 1
             },
-            "minItems": 1
+            "minItems": 1,
+            "description": "Route numbers (1-based) whose stops move onto `target`, left empty\nafterwards."
           }
         },
         "required": [
-          "op",
           "target",
           "sources"
         ],
-        "description": "Append `sources` routes' stops onto `target`, leaving the sources empty (edits.fbs `MergeRoutes`)."
+        "description": "Input for `routing24_edit_merge_routes`."
+      },
+      "EditMarkStopsInput": {
+        "type": "object",
+        "properties": {
+          "stops": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "description": "Planned stop business ids."
+          }
+        },
+        "required": [
+          "stops"
+        ],
+        "description": "Input for `routing24_edit_mark_user_assigned` / `..._clear_user_assigned`."
       },
       "EditResult": {
         "type": "object",
@@ -1540,7 +1135,7 @@
         "required": [
           "applied"
         ],
-        "description": "Result of `routing24_edit`."
+        "description": "Shared result of every `routing24_edit_*` tool."
       },
       "EditOpStatus": {
         "type": "object",
@@ -1629,7 +1224,7 @@
             "const": "not_sole_op"
           }
         ],
-        "description": "Why an edit batch was rejected (edits.fbs `EditRejection`, minus `none`).\nNotable: `stale_revision` = the plan changed under you — re-read\n`routing24_solution` and rebuild the batch; `optimize_in_progress` = wait for\nthe running optimization; slot codes mean your `slot` numbers are outdated."
+        "description": "Why an edit batch was rejected (edits.fbs `EditRejection`, minus `none`).\nNotable: `stale_revision` = the plan changed under you — re-read\n`routing24_status` and rebuild the batch; `optimize_in_progress` = wait for\nthe running optimization; `slot_out_of_range`/`overlapping_slots` mean your\nroute numbers are outdated."
       },
       "SessionState": {
         "type": "object",
@@ -1702,7 +1297,7 @@
             "items": {
               "$ref": "#/components/schemas/RouteSummary"
             },
-            "description": "Every route slot, fresh — supersedes slots from before the mutation."
+            "description": "Every route, fresh — supersedes route numbers from before the mutation."
           },
           "driftFromOptimized": {
             "$ref": "#/components/schemas/OptimizedDrift",
@@ -1715,9 +1310,9 @@
       "RouteSummary": {
         "type": "object",
         "properties": {
-          "slot": {
+          "route": {
             "type": "number",
-            "description": "0-based route slot (fresh — valid for the next edit batch)."
+            "description": "1-based route number (fresh — valid for the next edit call)."
           },
           "vehicleId": {
             "type": "string"
@@ -1727,7 +1322,7 @@
             "items": {
               "type": "string"
             },
-            "description": "Ordered site ids (depots excluded); empty = empty slot."
+            "description": "Ordered site ids (depots excluded); empty = empty route."
           },
           "distance": {
             "type": "number",
@@ -1752,20 +1347,20 @@
           }
         },
         "required": [
-          "slot",
+          "route",
           "stops"
         ],
-        "description": "One route slot's summary in a {@link SessionState} (post-edit snapshot)."
+        "description": "One route's summary in a {@link SessionState} (post-edit snapshot)."
       },
       "UserAssignedProblemReport": {
         "type": "object",
         "properties": {
-          "site": {
+          "stop": {
             "type": "string"
           },
           "route": {
             "type": "number",
-            "description": "Route slot the site sits on."
+            "description": "Route number (1-based) the stop sits on."
           },
           "intrinsic": {
             "type": "array",
@@ -1781,19 +1376,19 @@
           }
         },
         "required": [
-          "site",
+          "stop",
           "intrinsic",
           "introduced"
         ],
         "description": "The problem report behind a user-assigned site's badge (edits.fbs\n`UserAssignedReport`): what placing it costs, split into problems the site\nwould have anywhere (`intrinsic`) vs ones this placement introduced."
       },
-      "OptimizeRouteInput": {
+      "ReoptimizeRouteInput": {
         "type": "object",
         "properties": {
           "route": {
             "type": "integer",
-            "minimum": 0,
-            "description": "Route slot to optimize (see `PlanSolutionRoute.slot`); needs ≥2 stops."
+            "minimum": 1,
+            "description": "Route number to optimize — 1-based, as in\n`OptimizeStatus.routeStats[].route` and the UI; needs ≥2 stops."
           },
           "time_limit_s": {
             "type": "integer",
@@ -1805,9 +1400,9 @@
         "required": [
           "route"
         ],
-        "description": "Input for `routing24_optimize_route`: re-sequence ONE route's stops."
+        "description": "Input for `routing24_reoptimize_route`: re-sequence ONE route's stops."
       },
-      "OptimizeRouteResult": {
+      "ReoptimizeRouteResult": {
         "type": "object",
         "properties": {
           "started": {
@@ -1853,7 +1448,7 @@
         "required": [
           "started"
         ],
-        "description": "Result of `routing24_optimize_route`."
+        "description": "Result of `routing24_reoptimize_route`."
       },
       "HistoryResult": {
         "type": "object",
@@ -1901,48 +1496,1429 @@
           "applied"
         ],
         "description": "Result of `routing24_undo` / `routing24_redo`."
+      },
+      "ListPageInput": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Case-insensitive substring over the id and address fields."
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "0-based row offset into the filtered list."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Rows per page (default 30)."
+          }
+        },
+        "required": [],
+        "description": "Input for the four `routing24_list_*` tools — one paging/filter shape, and\neach tool returns ONE row type. (A single list tool taking a `kind` would\nswitch its own result shape, so a caller could not know what it would get\nback without re-reading the input it had just sent.)"
+      },
+      "ListStopsResult": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number",
+            "description": "Rows matching the filter, before paging."
+          },
+          "offset": {
+            "type": "number"
+          },
+          "returned": {
+            "type": "number"
+          },
+          "stops": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StopRow"
+            }
+          }
+        },
+        "required": [
+          "total",
+          "offset",
+          "returned",
+          "stops"
+        ],
+        "description": "Result of `routing24_list_stops`. Rows use the SAME shape\n`routing24_upsert_stops` accepts, so read-modify-write needs no field\nmapping — including `area`."
+      },
+      "StopRow": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "The WHOLE place the user named, spelling fixed — every part they wrote\n(building, tower, unit, street). Order words riding in the same line\n(\"pickup 2\", a quantity) are NOT part of the address and never become\none: they belong in the load fields."
+          },
+          "area": {
+            "type": "string",
+            "description": "Optional area/city qualifier shown after the address (the address book's\n`address`+`area` identity). The `routing24_list_*` tools return it on\nevery stop/depot row, so accepting it here is what makes that row\nwritable back through `routing24_upsert_stops`/`_depots` unchanged."
+          },
+          "pickup": {
+            "type": "number",
+            "description": "Load picked UP at this stop and carried back to the depot, in the\nsame unit as vehicle capacity (\"pickup 2\" on an order means\n`pickup: 2` — a load field, never part of the id or address)."
+          },
+          "delivery": {
+            "type": "number",
+            "description": "Load taken from the depot and DELIVERED at this stop, in the same\nunit as vehicle capacity."
+          },
+          "service_duration_s": {
+            "type": "number"
+          },
+          "tw_early_s": {
+            "type": "number",
+            "description": "Window opens, seconds since midnight. Absent = opens with the day."
+          },
+          "tw_late_s": {
+            "type": "number",
+            "description": "Window closes, seconds since midnight. Absent = open-ended (no\nclosing bound on this stop)."
+          },
+          "release_time_s": {
+            "type": "number"
+          },
+          "priority": {
+            "type": "number"
+          },
+          "required_tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "forbidden_tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "group": {
+            "type": "string"
+          },
+          "transfer_type": {
+            "oneOf": [
+              {
+                "const": "pickup"
+              },
+              {
+                "const": "delivery"
+              },
+              {
+                "const": "depot"
+              }
+            ]
+          },
+          "transfer_id": {
+            "type": "string"
+          },
+          "no_break": {
+            "type": "boolean"
+          },
+          "load_class": {
+            "type": "string"
+          },
+          "sequence_group": {
+            "type": "string"
+          },
+          "sequence_rank": {
+            "type": "number"
+          },
+          "max_time_in_vehicle_s": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "max_ride_overtime_s": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "id": {
+            "type": "string",
+            "description": "Caller-chosen business id — the name every other tool refers to.\nONE row per order: never a dumping ground for leftover words (a\nload like \"pickup 1\" is the `pickup` field, not an id and not a\nsecond stop)."
+          },
+          "status": {
+            "oneOf": [
+              {
+                "const": "geocoded"
+              },
+              {
+                "const": "ungeocoded"
+              }
+            ],
+            "description": "Whether the row's address resolved to a map location. Reported on\n`routing24_list_stops` rows; accepted and ignored on upsert (so a\nlisted row writes back unchanged)."
+          }
+        },
+        "required": [],
+        "description": "A delivery/pickup stop: a place plus solver site constraints.\n\nThe intersection above is flattened in the generated schema, which drops the\ndoc comments of the types it merges — and the schema is all a tool caller\nsees, so the conventions those types state are repeated here:\nthe location is the `address` string, geocoded internally; `id` is the\nbusiness id the caller chooses and every other tool refers to (there is no\nname field); loads go in `delivery` (loaded at the depot, dropped here) and\n`pickup` (taken on here, carried back to the depot); every `*_s` time field\nis in seconds — `tw_early_s`/`tw_late_s`/`release_time_s` counted from\nmidnight, `service_duration_s` a duration."
+      },
+      "ListVehiclesResult": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number",
+            "description": "Rows matching the filter, before paging."
+          },
+          "offset": {
+            "type": "number"
+          },
+          "returned": {
+            "type": "number"
+          },
+          "vehicles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VehicleRow"
+            }
+          }
+        },
+        "required": [
+          "total",
+          "offset",
+          "returned",
+          "vehicles"
+        ],
+        "description": "Result of `routing24_list_vehicles` (rows accepted by `routing24_upsert_vehicles`)."
+      },
+      "VehicleRow": {
+        "type": "object",
+        "properties": {
+          "tw_early_s": {
+            "type": "number",
+            "description": "Shift starts, seconds since midnight. Absent = no earliest start."
+          },
+          "tw_late_s": {
+            "type": "number",
+            "description": "Shift ends, seconds since midnight. Absent = open-ended: no\nshift-end limit at all, the strongest relaxation of the shift."
+          },
+          "capacity": {
+            "type": "number"
+          },
+          "available_count": {
+            "type": "number"
+          },
+          "cost": {
+            "$ref": "#/components/schemas/solver.VehicleCost"
+          },
+          "start_late_s": {
+            "type": "number",
+            "description": "Latest time the vehicle may start its shift (leave the depot),\ndistinct from tw_late_s (latest shift end). Absent = defaults to\ntw_late_s solver-side."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "max_reloads": {
+            "type": "number"
+          },
+          "max_duration_s": {
+            "type": "number",
+            "description": "Max route duration, seconds. Absent = uncapped."
+          },
+          "max_overtime_s": {
+            "type": "number"
+          },
+          "max_distance": {
+            "type": "number",
+            "description": "Max route distance in the plan's display unit. Absent = uncapped."
+          },
+          "break_rules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VehicleBreakRule"
+            }
+          },
+          "fixed_breaks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VehicleFixedBreak"
+            }
+          },
+          "period_driving_limit_s": {
+            "type": "number"
+          },
+          "period_driven_s": {
+            "type": "number"
+          },
+          "no_mix_load_classes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LoadClassGroup"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "force_allow_sites": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Stop ids this vehicle type may serve even when tags forbid it — a\nPERMISSION override, not a reservation: other compatible vehicles can\nstill take the stop. Precedence per vehicle: force_deny_sites beats\nforce_allow_sites beats the tag rule. To make a stop exclusive to one\nvehicle, use tags (required_tags on the stop + that tag on only this\nvehicle) or force_deny_sites on every other vehicle."
+          },
+          "force_deny_sites": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Stop ids this vehicle type must never serve (beats force_allow_sites and tags)."
+          },
+          "reload_depots": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Depot ids where mid-route reloads may happen (multi-trip). Omitted =\nsingle-trip unless `max_reloads` is set (then the home depot is used);\npair with `max_reloads` to cap trips."
+          },
+          "start_depot_id": {
+            "type": "string",
+            "description": "Business id of the start/finish depot (see `routing24_upsert_vehicles`)."
+          },
+          "end_depot_id": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "description": "A vehicle row: the upsert shape plus the resolved depot business ids."
+      },
+      "solver.VehicleCost": {
+        "type": "object",
+        "properties": {
+          "fixed": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Cost per use of the vehicle; charged only when it drives a route."
+          },
+          "distance": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Cost per km (or per mile when the plan's display unit is miles)."
+          },
+          "duration": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Cost per hour of route time."
+          },
+          "stop": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Cost per stop served (each order visit; a transfer pair counts its\npickup and delivery separately). Depot and reload visits are free.\nNo unit conversion: charged per visit in your cost units."
+          },
+          "overtime": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Surcharge per hour of overtime, paired with the vehicle's\n`max_overtime_s` cap. When overtime is allowed and this is unset, it\ndefaults to the `duration` rate (or a nominal 1/hour if that is 0)\nso allowed overtime is never free; an explicit 0 makes it free."
+          },
+          "ride_overtime": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Cost per hour of a linked (pickup & delivery) order's ride time\ninside its overtime band (`max_ride_overtime_s`, past\n`max_time_in_vehicle_s`). Unset/0 => that band is free."
+          },
+          "load_distance": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Cost per unit of load carried per km (or per mile when the plan's\ndisplay unit is miles): every leg charges the load on board times\nthe leg's length, so heavier cargo is priced onto shorter paths\nand dropped early. Models load-dependent fuel/energy burn and\nrefrigerated (cold chain) running cost. Counts toward the fleet's\n\"priced\" signal like `distance`/`duration`. Unset/0 => carriage\nis free."
+          }
+        },
+        "required": [],
+        "description": "Per-vehicle cost rates. An omitted field means 0. Exception: when NO\nvehicle in the fleet has a nonzero `distance`, `duration` or\n`load_distance` rate, the\noptimizer falls back to minimizing plain travel distance (so an\nall-blank fleet still gets sensible routes); setting every cost to an\nexplicit 0 triggers the same fallback plus a warning. An explicit 0 is\nmeaningful in a mixed fleet (e.g. a bike with free mileage next to a\npriced van)."
+      },
+      "VehicleBreakRule": {
+        "type": "object",
+        "properties": {
+          "max_driving_s": {
+            "type": "number"
+          },
+          "duration_s": {
+            "type": "number"
+          },
+          "split_first_s": {
+            "type": "number"
+          },
+          "split_second_s": {
+            "type": "number"
+          },
+          "service_counts": {
+            "type": "boolean"
+          }
+        },
+        "required": []
+      },
+      "VehicleFixedBreak": {
+        "type": "object",
+        "properties": {
+          "tw_early_s": {
+            "type": "number"
+          },
+          "tw_late_s": {
+            "type": "number"
+          },
+          "duration_s": {
+            "type": "number"
+          }
+        },
+        "required": []
+      },
+      "LoadClassGroup": {
+        "type": "object",
+        "properties": {
+          "classes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "classes"
+        ]
+      },
+      "ListDepotsResult": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number",
+            "description": "Rows matching the filter, before paging."
+          },
+          "offset": {
+            "type": "number"
+          },
+          "returned": {
+            "type": "number"
+          },
+          "depots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DepotRow"
+            }
+          }
+        },
+        "required": [
+          "total",
+          "offset",
+          "returned",
+          "depots"
+        ],
+        "description": "Result of `routing24_list_depots` (rows accepted by `routing24_upsert_depots`)."
+      },
+      "DepotRow": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "The WHOLE place the user named, spelling fixed — every part they wrote\n(building, tower, unit, street). Order words riding in the same line\n(\"pickup 2\", a quantity) are NOT part of the address and never become\none: they belong in the load fields."
+          },
+          "area": {
+            "type": "string",
+            "description": "Optional area/city qualifier shown after the address (the address book's\n`address`+`area` identity). The `routing24_list_*` tools return it on\nevery stop/depot row, so accepting it here is what makes that row\nwritable back through `routing24_upsert_stops`/`_depots` unchanged."
+          },
+          "service_duration_s": {
+            "type": "number",
+            "description": "Handling time at the depot, seconds. Absent = none."
+          },
+          "tw_early_s": {
+            "type": "number",
+            "description": "Opens at, seconds since midnight. Absent = open from any time."
+          },
+          "tw_late_s": {
+            "type": "number",
+            "description": "Closes at, seconds since midnight. Absent = open-ended: the depot\nnever closes and the return-by-close constraint is fully lifted."
+          },
+          "no_break": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "oneOf": [
+              {
+                "const": "geocoded"
+              },
+              {
+                "const": "ungeocoded"
+              }
+            ]
+          }
+        },
+        "required": [],
+        "description": "A depot row: a place plus depot constraints (open window, handling).\nSame conventions as {@link StopRow}: an `address` geocoded internally, a\ncaller-chosen `id`, `tw_early_s`/`tw_late_s` in seconds since midnight and\n`service_duration_s` in seconds. `status` is reported on\n`routing24_list_depots` rows; accepted and ignored on upsert."
+      },
+      "ListAddressesResult": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number",
+            "description": "Rows matching the filter, before paging."
+          },
+          "offset": {
+            "type": "number"
+          },
+          "returned": {
+            "type": "number"
+          },
+          "addresses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AddressRow"
+            }
+          }
+        },
+        "required": [
+          "total",
+          "offset",
+          "returned",
+          "addresses"
+        ],
+        "description": "Result of `routing24_list_addresses` (rows accepted by `routing24_upsert_addresses`)."
+      },
+      "AddressRow": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "area": {
+            "type": "string",
+            "description": "Optional area/city qualifier displayed after the address."
+          },
+          "status": {
+            "oneOf": [
+              {
+                "const": "geocoded"
+              },
+              {
+                "const": "ungeocoded"
+              }
+            ],
+            "description": "Whether the row resolved to a map location. Reported on\n`routing24_list_addresses` rows; accepted and ignored on upsert."
+          },
+          "usedBySites": {
+            "type": "number"
+          },
+          "usedByDepots": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "address"
+        ],
+        "description": "An address row: the upsert shape plus how many entities reference it."
+      },
+      "UpsertStopsInput": {
+        "type": "object",
+        "properties": {
+          "stops": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StopPatch"
+            },
+            "minItems": 1
+          }
+        },
+        "required": [
+          "stops"
+        ],
+        "description": "Input for `routing24_upsert_stops`."
+      },
+      "StopPatch": {
+        "type": "object",
+        "properties": {
+          "pickup": {
+            "type": "number",
+            "description": "Load picked UP at this stop and carried back to the depot, in the\nsame unit as vehicle capacity (\"pickup 2\" on an order means\n`pickup: 2` — a load field, never part of the id or address)."
+          },
+          "delivery": {
+            "type": "number",
+            "description": "Load taken from the depot and DELIVERED at this stop, in the same\nunit as vehicle capacity."
+          },
+          "service_duration_s": {
+            "type": "number"
+          },
+          "priority": {
+            "type": "number"
+          },
+          "required_tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "forbidden_tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "group": {
+            "type": "string"
+          },
+          "transfer_type": {
+            "oneOf": [
+              {
+                "const": "pickup"
+              },
+              {
+                "const": "delivery"
+              },
+              {
+                "const": "depot"
+              }
+            ]
+          },
+          "transfer_id": {
+            "type": "string"
+          },
+          "no_break": {
+            "type": "boolean"
+          },
+          "load_class": {
+            "type": "string"
+          },
+          "sequence_group": {
+            "type": "string"
+          },
+          "sequence_rank": {
+            "type": "number"
+          },
+          "address": {
+            "type": "string",
+            "description": "The WHOLE place the user named, spelling fixed — every part they wrote\n(building, tower, unit, street). Order words riding in the same line\n(\"pickup 2\", a quantity) are NOT part of the address and never become\none: they belong in the load fields."
+          },
+          "area": {
+            "type": "string",
+            "description": "Optional area/city qualifier shown after the address (the address book's\n`address`+`area` identity). The `routing24_list_*` tools return it on\nevery stop/depot row, so accepting it here is what makes that row\nwritable back through `routing24_upsert_stops`/`_depots` unchanged."
+          },
+          "max_time_in_vehicle_s": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "max_ride_overtime_s": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "id": {
+            "type": "string",
+            "description": "Caller-chosen business id — the name every other tool refers to.\nONE row per order: never a dumping ground for leftover words (a\nload like \"pickup 1\" is the `pickup` field, not an id and not a\nsecond stop)."
+          },
+          "status": {
+            "oneOf": [
+              {
+                "const": "geocoded"
+              },
+              {
+                "const": "ungeocoded"
+              }
+            ],
+            "description": "Whether the row's address resolved to a map location. Reported on\n`routing24_list_stops` rows; accepted and ignored on upsert (so a\nlisted row writes back unchanged)."
+          },
+          "tw_early_s": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "tw_late_s": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "release_time_s": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          }
+        },
+        "required": [],
+        "description": "{@link StopRow} with clearable bounds (see above)."
+      },
+      "UpsertDepotsInput": {
+        "type": "object",
+        "properties": {
+          "depots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DepotPatch"
+            },
+            "minItems": 1
+          }
+        },
+        "required": [
+          "depots"
+        ],
+        "description": "Input for `routing24_upsert_depots`."
+      },
+      "DepotPatch": {
+        "type": "object",
+        "properties": {
+          "service_duration_s": {
+            "type": "number",
+            "description": "Handling time at the depot, seconds. Absent = none."
+          },
+          "no_break": {
+            "type": "boolean"
+          },
+          "address": {
+            "type": "string",
+            "description": "The WHOLE place the user named, spelling fixed — every part they wrote\n(building, tower, unit, street). Order words riding in the same line\n(\"pickup 2\", a quantity) are NOT part of the address and never become\none: they belong in the load fields."
+          },
+          "area": {
+            "type": "string",
+            "description": "Optional area/city qualifier shown after the address (the address book's\n`address`+`area` identity). The `routing24_list_*` tools return it on\nevery stop/depot row, so accepting it here is what makes that row\nwritable back through `routing24_upsert_stops`/`_depots` unchanged."
+          },
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "oneOf": [
+              {
+                "const": "geocoded"
+              },
+              {
+                "const": "ungeocoded"
+              }
+            ]
+          },
+          "tw_early_s": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "tw_late_s": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          }
+        },
+        "required": [],
+        "description": "{@link DepotRow} with clearable bounds (see above)."
+      },
+      "UpsertVehiclesInput": {
+        "type": "object",
+        "properties": {
+          "vehicles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VehiclePatch"
+            },
+            "minItems": 1
+          }
+        },
+        "required": [
+          "vehicles"
+        ],
+        "description": "Input for `routing24_upsert_vehicles`. `start_depot_id`/`end_depot_id` take\ndepot business ids and may be omitted when the plan has exactly one depot."
+      },
+      "VehiclePatch": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "capacity": {
+            "type": "number"
+          },
+          "available_count": {
+            "type": "number"
+          },
+          "cost": {
+            "$ref": "#/components/schemas/solver.VehicleCost"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "max_reloads": {
+            "type": "number"
+          },
+          "max_overtime_s": {
+            "type": "number"
+          },
+          "break_rules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VehicleBreakRule"
+            }
+          },
+          "fixed_breaks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VehicleFixedBreak"
+            }
+          },
+          "period_driving_limit_s": {
+            "type": "number"
+          },
+          "period_driven_s": {
+            "type": "number"
+          },
+          "no_mix_load_classes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LoadClassGroup"
+            }
+          },
+          "force_allow_sites": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Stop ids this vehicle type may serve even when tags forbid it — a\nPERMISSION override, not a reservation: other compatible vehicles can\nstill take the stop. Precedence per vehicle: force_deny_sites beats\nforce_allow_sites beats the tag rule. To make a stop exclusive to one\nvehicle, use tags (required_tags on the stop + that tag on only this\nvehicle) or force_deny_sites on every other vehicle."
+          },
+          "force_deny_sites": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Stop ids this vehicle type must never serve (beats force_allow_sites and tags)."
+          },
+          "reload_depots": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Depot ids where mid-route reloads may happen (multi-trip). Omitted =\nsingle-trip unless `max_reloads` is set (then the home depot is used);\npair with `max_reloads` to cap trips."
+          },
+          "start_depot_id": {
+            "type": "string",
+            "description": "Business id of the start/finish depot (see `routing24_upsert_vehicles`)."
+          },
+          "end_depot_id": {
+            "type": "string"
+          },
+          "tw_early_s": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "tw_late_s": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "start_late_s": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "max_duration_s": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "max_distance": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          }
+        },
+        "required": [],
+        "description": "{@link VehicleRow} with clearable bounds (see above)."
+      },
+      "UpsertAddressesInput": {
+        "type": "object",
+        "properties": {
+          "addresses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AddressUpsert"
+            },
+            "minItems": 1
+          }
+        },
+        "required": [
+          "addresses"
+        ],
+        "description": "Input for `routing24_upsert_addresses` (identity is the `address`+`area` pair)."
+      },
+      "AddressUpsert": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "area": {
+            "type": "string",
+            "description": "Optional area/city qualifier displayed after the address."
+          },
+          "status": {
+            "oneOf": [
+              {
+                "const": "geocoded"
+              },
+              {
+                "const": "ungeocoded"
+              }
+            ],
+            "description": "Whether the row resolved to a map location. Reported on\n`routing24_list_addresses` rows; accepted and ignored on upsert."
+          }
+        },
+        "required": [
+          "address"
+        ],
+        "description": "One address-book row for `routing24_upsert_addresses` (and the row shape\n`routing24_list_addresses` returns). The row's identity\nis the `address` (+ `area`) string pair — upserting the same pair updates\nthe existing row."
+      },
+      "UpsertResult": {
+        "type": "object",
+        "properties": {
+          "applied": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          },
+          "added": {
+            "type": "number"
+          },
+          "updated": {
+            "type": "number"
+          },
+          "skipped": {
+            "type": "number",
+            "description": "Rows dropped (e.g. malformed beyond repair)."
+          },
+          "unresolvedRefs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Unresolved cross-references, as human-readable messages."
+          },
+          "geocoded": {
+            "type": "number",
+            "description": "How many entities were geocoded from their address on the way in\n(rows whose address could not be geocoded are still saved — see\n`addressDiagnostics`)."
+          },
+          "addressDiagnostics": {
+            "$ref": "#/components/schemas/AddressDiagnostics",
+            "description": "Present only when the batch left address problems behind."
+          },
+          "fleetDiagnostics": {
+            "$ref": "#/components/schemas/FleetDiagnostics",
+            "description": "Present only when the edit left stops no vehicle can serve."
+          }
+        },
+        "required": [
+          "applied",
+          "added",
+          "updated",
+          "skipped"
+        ],
+        "description": "Result of every `routing24_upsert_*` tool."
+      },
+      "AddressDiagnostics": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "string",
+            "description": "One host-composed sentence with the counts."
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "category": {
+                  "oneOf": [
+                    {
+                      "const": "ungeocoded"
+                    },
+                    {
+                      "const": "far_from_plan"
+                    }
+                  ],
+                  "description": "`ungeocoded` = rows saved without a location (optimizing is blocked\nwhile a stop or depot uses one). `far_from_plan` = geocoded far from\nthe rest of the plan — usually a geocoding miss, occasionally\nintended."
+                },
+                "count": {
+                  "type": "number"
+                },
+                "explanation": {
+                  "type": "string",
+                  "description": "What this means for the plan, one sentence."
+                },
+                "lever": {
+                  "type": "string",
+                  "description": "The exact call that addresses it (offer it to the user first)."
+                }
+              },
+              "required": [
+                "category",
+                "count",
+                "explanation",
+                "lever"
+              ]
+            }
+          }
+        },
+        "required": [
+          "summary",
+          "problems"
+        ],
+        "description": "Address problems the upsert path detected, host-computed (the geocoder and\nthe geo analysis are black boxes — this block is their only agent-visible\noutput). Carries counts and next calls, never the rows themselves: the user\nsees the affected addresses in the app and in the `fix_addresses` review\ndialog, so never enumerate them in chat or in an ask_user question."
+      },
+      "FleetDiagnostics": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "string",
+            "description": "One host-composed sentence with the counts."
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "category": {
+                  "const": "vehicle_incompatible",
+                  "description": "`vehicle_incompatible` = stops no vehicle in the fleet can serve\n(same name the solver reports post-solve for such stops)."
+                },
+                "count": {
+                  "type": "number"
+                },
+                "explanation": {
+                  "type": "string",
+                  "description": "What this means for the plan, one sentence."
+                },
+                "lever": {
+                  "type": "string",
+                  "description": "The exact call that addresses it (offer it to the user first)."
+                }
+              },
+              "required": [
+                "category",
+                "count",
+                "explanation",
+                "lever"
+              ]
+            }
+          }
+        },
+        "required": [
+          "summary",
+          "problems"
+        ],
+        "description": "Tag/fleet compatibility problems a data edit left behind, host-computed\nfrom the same predicate the solver applies (required_tags/forbidden_tags\nplus the force-allow/deny overrides). Carries counts and next calls, never\nthe rows: the user sees the affected stops in the app. Absent while the\nplan has no vehicles at all — an empty fleet is a normal intermediate\nstate, not a compatibility problem."
+      },
+      "UpsertAddressesResult": {
+        "type": "object",
+        "properties": {
+          "applied": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          },
+          "added": {
+            "type": "number"
+          },
+          "updated": {
+            "type": "number"
+          },
+          "skipped": {
+            "type": "number",
+            "description": "Rows dropped (e.g. malformed beyond repair)."
+          },
+          "unresolvedRefs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Unresolved cross-references, as human-readable messages."
+          },
+          "geocoded": {
+            "type": "number",
+            "description": "How many entities were geocoded from their address on the way in\n(rows whose address could not be geocoded are still saved — see\n`addressDiagnostics`)."
+          },
+          "addressDiagnostics": {
+            "$ref": "#/components/schemas/AddressDiagnostics",
+            "description": "Present only when the batch left address problems behind."
+          },
+          "fleetDiagnostics": {
+            "$ref": "#/components/schemas/FleetDiagnostics",
+            "description": "Present only when the edit left stops no vehicle can serve."
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "address": {
+                  "type": "string",
+                  "description": "The `address` as sent (the row's identity, with `area`)."
+                },
+                "area": {
+                  "type": "string"
+                },
+                "status": {
+                  "oneOf": [
+                    {
+                      "const": "geocoded"
+                    },
+                    {
+                      "const": "ungeocoded"
+                    }
+                  ]
+                },
+                "matched": {
+                  "type": "string",
+                  "description": "Canonical address the geocoder matched, when this call geocoded the row."
+                }
+              },
+              "required": [
+                "address",
+                "status"
+              ]
+            }
+          }
+        },
+        "required": [
+          "applied",
+          "added",
+          "updated",
+          "skipped"
+        ],
+        "description": "Result of `routing24_upsert_addresses`: the shared upsert counts plus, for\nSMALL batches only (at most 5 rows — the confirm-with-the-user use), one\nresult per input row. `matched` is the canonical address the geocoder\nresolved for rows geocoded on this call — state it when confirming a\ndoubtful address with the user; it is transient and never stored. Rows that\nreused an already-located address book entry come back `status: \"geocoded\"`\nwith no `matched`. Larger batches return counts and `addressDiagnostics`\nonly."
+      },
+      "DeleteByIdsInput": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "description": "Input for the four `routing24_delete_*` tools: business ids as returned by\nthe matching `routing24_list_*` (for addresses, the `address` — or\n`address, area` — string)."
+      },
+      "DeleteResult": {
+        "type": "object",
+        "properties": {
+          "deleted": {
+            "type": "number"
+          },
+          "notFound": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ids that matched nothing (nothing was deleted for them)."
+          },
+          "cascade": {
+            "type": "string",
+            "description": "What was removed alongside (deletes cascade: a depot delete removes\nvehicles referencing it; an address delete removes the depots/stops at\nit; a stop delete drops its address when nothing else uses it)."
+          },
+          "fleetDiagnostics": {
+            "$ref": "#/components/schemas/FleetDiagnostics",
+            "description": "Present only when the delete left stops no vehicle can serve."
+          }
+        },
+        "required": [
+          "deleted"
+        ],
+        "description": "Result of every `routing24_delete_*` tool."
+      },
+      "ReoptimizePlanInput": {
+        "type": "object",
+        "properties": {
+          "options": {
+            "type": "object",
+            "properties": {
+              "time_limit_s": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Solve budget in seconds; omit to auto-scale with problem size."
+              }
+            },
+            "required": []
+          }
+        },
+        "required": [],
+        "description": "Input for `routing24_reoptimize_plan`."
+      },
+      "OpenPageInput": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "oneOf": [
+              {
+                "const": "home"
+              },
+              {
+                "const": "plans"
+              },
+              {
+                "const": "addresses"
+              },
+              {
+                "const": "stops"
+              },
+              {
+                "const": "depots"
+              },
+              {
+                "const": "vehicles"
+              },
+              {
+                "const": "optimize"
+              }
+            ],
+            "description": "The app page to open (\"stops\" is the Orders page)."
+          }
+        },
+        "required": [
+          "page"
+        ],
+        "description": "Input for `routing24_open_page`."
+      },
+      "ShowOnMapInput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Business id of a stop, depot, or address-book row."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "description": "Input for `routing24_show_on_map`."
+      },
+      "ShowOnMapResult": {
+        "type": "object",
+        "properties": {
+          "shown": {
+            "type": "boolean"
+          },
+          "kind": {
+            "oneOf": [
+              {
+                "const": "address"
+              },
+              {
+                "const": "depot"
+              },
+              {
+                "const": "stop"
+              }
+            ],
+            "description": "What the id resolved to."
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "shown"
+        ],
+        "description": "Result of `routing24_show_on_map`."
+      },
+      "ExportExcelResult": {
+        "type": "object",
+        "properties": {
+          "exported": {
+            "type": "boolean"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "The browser download's file name."
+          },
+          "kind": {
+            "oneOf": [
+              {
+                "const": "solution"
+              },
+              {
+                "const": "plan"
+              }
+            ],
+            "description": "`solution` = optimized routes workbook; `plan` = plan data workbook."
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "exported"
+        ],
+        "description": "Result of `routing24_export_excel`."
       }
     }
   },
   "schemas": [
     {
-      "$ref": "#/components/schemas/OptimizeInput"
+      "$ref": "#/components/schemas/NewPlanInput"
     },
     {
-      "$ref": "#/components/schemas/OptimizeStarted"
+      "$ref": "#/components/schemas/NewPlanResult"
+    },
+    {
+      "$ref": "#/components/schemas/SolveStarted"
     },
     {
       "$ref": "#/components/schemas/PaidFeatureReport"
     },
     {
-      "$ref": "#/components/schemas/GeocodeInput"
-    },
-    {
-      "$ref": "#/components/schemas/GeocodeResult"
-    },
-    {
       "$ref": "#/components/schemas/OptimizeStatus"
     },
     {
-      "$ref": "#/components/schemas/PlanSolution"
+      "$ref": "#/components/schemas/RouteInput"
     },
     {
-      "$ref": "#/components/schemas/SolutionInput"
+      "$ref": "#/components/schemas/PlanSolutionRoute"
     },
     {
-      "$ref": "#/components/schemas/EditInput"
+      "$ref": "#/components/schemas/UnassignedInput"
+    },
+    {
+      "$ref": "#/components/schemas/UnassignedReport"
+    },
+    {
+      "$ref": "#/components/schemas/EditMoveStopsInput"
+    },
+    {
+      "$ref": "#/components/schemas/EditUnassignStopsInput"
+    },
+    {
+      "$ref": "#/components/schemas/EditSetRouteVehicleInput"
+    },
+    {
+      "$ref": "#/components/schemas/EditCreateRouteInput"
+    },
+    {
+      "$ref": "#/components/schemas/EditRemoveRoutesInput"
+    },
+    {
+      "$ref": "#/components/schemas/EditSplitRouteInput"
+    },
+    {
+      "$ref": "#/components/schemas/EditMergeRoutesInput"
+    },
+    {
+      "$ref": "#/components/schemas/EditMarkStopsInput"
     },
     {
       "$ref": "#/components/schemas/EditResult"
     },
     {
-      "$ref": "#/components/schemas/OptimizeRouteInput"
+      "$ref": "#/components/schemas/ReoptimizeRouteInput"
     },
     {
-      "$ref": "#/components/schemas/OptimizeRouteResult"
+      "$ref": "#/components/schemas/ReoptimizeRouteResult"
     },
     {
       "$ref": "#/components/schemas/HistoryResult"
+    },
+    {
+      "$ref": "#/components/schemas/ListPageInput"
+    },
+    {
+      "$ref": "#/components/schemas/ListStopsResult"
+    },
+    {
+      "$ref": "#/components/schemas/ListVehiclesResult"
+    },
+    {
+      "$ref": "#/components/schemas/ListDepotsResult"
+    },
+    {
+      "$ref": "#/components/schemas/ListAddressesResult"
+    },
+    {
+      "$ref": "#/components/schemas/UpsertStopsInput"
+    },
+    {
+      "$ref": "#/components/schemas/UpsertDepotsInput"
+    },
+    {
+      "$ref": "#/components/schemas/UpsertVehiclesInput"
+    },
+    {
+      "$ref": "#/components/schemas/UpsertAddressesInput"
+    },
+    {
+      "$ref": "#/components/schemas/UpsertResult"
+    },
+    {
+      "$ref": "#/components/schemas/UpsertAddressesResult"
+    },
+    {
+      "$ref": "#/components/schemas/DeleteByIdsInput"
+    },
+    {
+      "$ref": "#/components/schemas/DeleteResult"
+    },
+    {
+      "$ref": "#/components/schemas/ReoptimizePlanInput"
+    },
+    {
+      "$ref": "#/components/schemas/OpenPageInput"
+    },
+    {
+      "$ref": "#/components/schemas/ShowOnMapInput"
+    },
+    {
+      "$ref": "#/components/schemas/ShowOnMapResult"
+    },
+    {
+      "$ref": "#/components/schemas/ExportExcelResult"
     }
   ]
 }

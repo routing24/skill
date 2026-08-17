@@ -24,22 +24,28 @@ window.__r24call = async (name, args = {}) => {
 //    stored.
 await __r24call('routing24_get_auth_user');
 
-// 3) Geocode depot + all stop addresses. Inspect results for ok:false and
-//    sanity-check the `matched` strings with the user before optimizing.
-await __r24call('routing24_geocode', {
-    addresses: ["DEPOT ADDRESS", "STOP 1 ADDRESS", "STOP 2 ADDRESS"],
+// 3) Start a fresh plan FIRST — it commits an EMPTY plan (replacing the
+//    loaded one); everything below, saved addresses included, lands in it.
+await __r24call('routing24_new_plan', {});
+
+// 3b) (Optional) Confirm doubtful addresses — a routing24_upsert_addresses
+//    batch of at most 5 rows returns `rows`, one per input, with status
+//    ('geocoded' | 'ungeocoded') and the canonical `matched` text. Show the
+//    user ungeocoded rows and sanity-check `matched` before optimizing; stop
+//    rows sent later with the SAME address strings reuse these locations.
+await __r24call('routing24_upsert_addresses', {
+    addresses: [{ address: "DEPOT ADDRESS" }, { address: "STOP 1 ADDRESS" }],
 });
 
-// 4) Start optimization. Prefer passing lat/lng from step 3 so nothing is
-//    re-geocoded (addresses alone also work; they'll be geocoded).
-await __r24call('routing24_optimize', {
-    depot: { address: "DEPOT ADDRESS" /*, lat, lng */ },
-    stops: [
-        // priority (1..1000, default 1): higher-priority stops are kept when not
-        // everything fits. required_tags: only a vehicle carrying these tags may serve it.
-        { id: "S1", address: "STOP 1 ADDRESS", delivery: 1, service_duration_s: 300, priority: 10 },
-        { id: "S2", address: "STOP 2 ADDRESS", delivery: 1, service_duration_s: 300, required_tags: ["reefer"] },
-    ],
+// 4) Build the plan piece by piece, then solve. Every row needs an `id` (the
+//    business id every other tool refers to). The address string is the only
+//    location carrier — a decimal "lat, lng" literal works as an address for
+//    callers holding exact coordinates. Geocode failures come back in
+//    addressDiagnostics; resolve them before solving.
+await __r24call('routing24_upsert_depots', {
+    depots: [{ id: "D1", address: "DEPOT ADDRESS" }],
+});
+await __r24call('routing24_upsert_vehicles', {
     vehicles: [
         // tags satisfy stops' required_tags. max_reloads caps mid-route reloads
         // (multi-trip); vehicles reload at the depot by default when needed.
@@ -52,55 +58,59 @@ await __r24call('routing24_optimize', {
         // fleets: { cost: { distance: 0, duration: 6 } } bike vs
         // { cost: { distance: 2, duration: 18, fixed: 40 } } van.
         {
+            id: "V1",
             available_count: 2, capacity: 20, tw_early_s: 8 * 3600, tw_late_s: 18 * 3600, tags: ["reefer"], max_reloads: 2,
             break_rules: [{ max_driving_s: 16200, duration_s: 2700, split_first_s: 900, split_second_s: 1800 }],
         },
     ],
-    // options: { time_limit_s: 30 },
 });
+await __r24call('routing24_upsert_stops', {
+    stops: [
+        // priority (1..1000, default 1): higher-priority stops are kept when not
+        // everything fits. required_tags: only a vehicle carrying these tags may serve it.
+        { id: "S1", address: "STOP 1 ADDRESS", delivery: 1, service_duration_s: 300, priority: 10 },
+        { id: "S2", address: "STOP 2 ADDRESS", delivery: 1, service_duration_s: 300, required_tags: ["reefer"] },
+    ],
+});
+await __r24call('routing24_reoptimize_plan', {}); // options: { time_limit_s: 30 }
 
-// 5) Poll (~every 3s) until phase is "done" or "error". Relay progress meanwhile.
+// 5) Poll by looping on routing24_status until phase is 'done' or 'error': while a solve runs each call holds its reply up to ~15s (returning early when the solve lands), so call it back-to-back — no sleep between calls is needed. Relay progress meanwhile.
 await __r24call('routing24_status');
 
 // 6) Show routes on the map, then persist and get the plan link.
 await __r24call('routing24_render');
 await __r24call('routing24_save'); // -> { saved, planUrl }
 
-// 7) Full solution: per-route-slot ordered stops (resolved id/address/lat/lng,
-//    ETAs, loads, waits, problems) + unassigned list, user-assigned marks and
-//    undo/redo depths. Works now and on a plan reopened by URL. Route `slot`
-//    is the address the editing tools use.
-await __r24call('routing24_solution');
+// 7) Solution overview: rollups + economic cost/objective + per-route
+//    `routeStats` (vehicle, stop count, distance, duration, feasibility, cost;
+//    each with its 1-based `route` number). No stop dump. Works now and on a
+//    plan reopened by URL.
+await __r24call('routing24_status');
+// 7b) One route's ordered stops (resolved id/address, ETAs, loads,
+//     waits, problems) by its 1-based `route` number from routeStats.
+await __r24call('routing24_route', { route: 1 });
 
 // 8) Current plan URL (also returned by save).
 await __r24call('routing24_plan_url');
 
-// 9) Manual editing — ONE atomic batch: move two stops after S07 on their
-//    route, drop S99 to unassigned, and rebind route slot 2 to vehicle VAN-3.
-//    Problems don't reject: judge state.feasible / userAssignedReports.
-await __r24call('routing24_edit', {
-    ops: [
-        { op: 'move_sites', sites: ['S12', 'S13'], after: 'S07' },
-        { op: 'unassign_sites', sites: ['S99'] },
-        { op: 'set_route_vehicle', route: 2, vehicle: 'VAN-3' },
-    ],
-});
+// 9) Manual editing — one tool per action, each atomic on its own. Problems
+//    don't reject: judge state.feasible / userAssignedReports after each.
+await __r24call('routing24_edit_move_stops', { stops: ['S12', 'S13'], after: 'S07' });
+await __r24call('routing24_edit_unassign_stops', { stops: ['S99'] });
+await __r24call('routing24_edit_set_route_vehicle', { route: 2, vehicle: 'VAN-3' });
 
-// 10) Plan an unassigned stop onto route slot 1 at the engine-chosen cheapest
+// 10) Plan an unassigned stop onto Route 1 at the engine-chosen cheapest
 //     position, then tidy the sequence (sub-second, synchronous).
-await __r24call('routing24_edit', {
-    ops: [{ op: 'move_sites', sites: ['S99'], to_route: 1, placement: 'best' }],
+await __r24call('routing24_edit_move_stops', {
+    stops: ['S99'],
+    to_route: 1,
+    placement: 'best',
 });
-await __r24call('routing24_optimize_route', { route: 1 });
+await __r24call('routing24_reoptimize_route', { route: 1 });
 
-// 11) Empty a route and remove it (remove_routes takes EMPTY routes only, so
-//     unassign first; slots compact — re-read them from the returned state).
-await __r24call('routing24_edit', {
-    ops: [
-        { op: 'unassign_sites', sites: ['S3', 'S4'] },
-        { op: 'remove_routes', routes: [3] },
-    ],
-});
+// 11) Delete a route. Any stops still on it are unassigned in the SAME atomic
+//     edit; the remaining routes renumber — re-read them from the returned state.
+await __r24call('routing24_edit_remove_routes', { routes: [3] });
 
 // 12) Undo the last edit (SHARED history with the user's manual edits — never
 //     undo speculatively). Redo mirrors it.
@@ -108,17 +118,17 @@ await __r24call('routing24_undo');
 
 // 13) Why are stops unassigned? Prose diagnostics (summary + per-site
 //     explanation/blockers/levers), recomputed on demand.
-(await __r24call('routing24_solution', { refresh_diagnostics: true })).unassignedDiagnostics;
+(await __r24call('routing24_unassigned', { refresh_diagnostics: true })).unassignedDiagnostics;
 
 // Optional: cancel a long-running solve (keeps the best solution so far).
 await __r24call('routing24_cancel');
 
-// Optional single blocking wait (prefer separate status calls to stream progress):
+// Optional single blocking wait (prefer separate status calls to stream progress).
+// Poll by looping on routing24_status until phase is 'done' or 'error': while a solve runs each call holds its reply up to ~15s (returning early when the solve lands), so call it back-to-back — no sleep between calls is needed.
 await (async () => {
     for (let i = 0; i < 400; i++) {
         const s = await __r24call('routing24_status');
         if (s.phase === "done" || s.phase === "error") return s;
-        await new Promise((r) => setTimeout(r, 3000));
     }
     return __r24call('routing24_status');
 })();

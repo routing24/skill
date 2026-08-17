@@ -31,6 +31,7 @@ Download the packaged skill and add it to a compatible agent (Claude / Cowork):
 - [`references/`](references/) — API contract ([`api.md`](references/api.md)),
   machine-readable JSON Schema ([`schema.json`](references/schema.json)), and
   ready-to-eval call snippets ([`examples.md`](references/examples.md)).
+- [`CHANGELOG.md`](CHANGELOG.md) — version history of the generated content.
 
 The always-current contract is served at https://routing24.com/llms.txt.
 

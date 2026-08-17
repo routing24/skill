@@ -10,8 +10,9 @@ description: >-
   do route planning or last-mile delivery optimization, edit routes manually
   (move stops between routes, unassign stops, split/merge routes, change
   vehicles, undo), or asks for Routing24 routing24.com. Driven from the user's
-  own browser tab via WebMCP tools (routing24_geocode, routing24_optimize,
-  routing24_status, routing24_edit, routing24_save, ...) registered on
+  own browser tab via WebMCP tools (routing24_new_plan,
+  routing24_upsert_stops, routing24_reoptimize_plan, routing24_status,
+  routing24_edit_move_stops, routing24_save, ...) registered on
   document.modelContext.
 license: Proprietary. Visit https://routing24.com/terms for full terms and conditions.
 compatibility: >-
@@ -24,7 +25,7 @@ compatibility: >-
   API key is needed, and no sign-in: the full flow works anonymously.
 metadata:
   author: Routinghub LLC
-  version: "1.2.1"
+  version: "5.0.0"
 ---
 
 # Routing24 route optimizer
@@ -42,7 +43,7 @@ The page registers **WebMCP tools** under the `routing24_*` prefix on
 so the tools exist even without native browser support). Discover them with
 `getTools()`, invoke them with `executeTool(tool, JSON.stringify(args))` — which
 resolves to a **JSON string** you must parse (and **rejects** on validation or
-handler errors). The optimizer runs client-side in WASM, so `routing24_optimize`
+handler errors). The optimizer runs client-side in WASM, so `routing24_reoptimize_plan`
 is asynchronous: you start it, then **poll `routing24_status`**.
 
 ## Runtime requirements
@@ -57,7 +58,7 @@ is asynchronous: you start it, then **poll `routing24_status`**.
   public API and no API key**. Route optimization runs **client-side in the
   browser**, while geocoding, routing/distance matrices, and ML/LLM run on
   **Routing24's own servers** under an opaque token issued for the user's account
-  (registered or anonymous). **No sign-in is required** — the full flow (geocode,
+  (registered or anonymous). **No sign-in is required** — the full flow (create,
   optimize, render, save, share) works anonymously. Do not ask the user to log in.
   Signing in changes **where** the plan is stored (see the plan-link note under
   *Notes & pitfalls*) and which **paid constraints** a solve may keep (see
@@ -65,7 +66,7 @@ is asynchronous: you start it, then **poll `routing24_status`**.
 
 ## Plans & paid features
 
-Most of `OptimizeInput` is free. The fields below need a paid Routing24 plan;
+Most plan-data fields are free. The fields below need a paid Routing24 plan;
 everything not listed — addresses, loads, time windows (**including multi-day
 `+1` offsets**), shifts, capacity, `max_reloads` and every `cost` field the
 table does not name — works on every account.
@@ -90,7 +91,7 @@ table does not name — works on every account.
 
 **What happens on a free account.** Nothing is rejected and nothing is hidden:
 a plan using paid fields solves normally for the first
-**5 optimizations**. After that `routing24_optimize`
+**5 optimizations**. After that `routing24_reoptimize_plan`
 still runs, but it **drops those constraints from the solve** and says so in
 its result — `paidFeatures.stripped` lists what it ignored and
 `paidFeatures.freeRunsLeft` is `0`.
@@ -110,7 +111,7 @@ retry the call hoping for a different answer.
    const mc = document.modelContext ?? navigator.modelContext;
    (await mc?.getTools())?.map(t => t.name) ?? null;
    ```
-   Expect the `routing24_*` names (`routing24_optimize` etc.). If `null` or
+   Expect the `routing24_*` names (`routing24_reoptimize_plan` etc.). If `null` or
    missing, the page may still be loading — wait 2s and retry, then reload once;
    if still missing, tell the user the Routing24 agent tools aren't available on
    this page and stop.
@@ -132,57 +133,83 @@ retry the call hoping for a different answer.
 4. **(Optional) Note who's signed in.** `await __r24call('routing24_get_auth_user')`
    returns `{ user }` — the user's email, or `"anonymous"`. **Do not require
    sign-in** — the whole flow works anonymously. This only affects *where* the
-   saved plan lives and what you tell the user about the plan link (see step 10).
+   saved plan lives and what you tell the user about the plan link (see step 11).
 
-5. **Parse the request** into the `routing24_optimize` input shape (see the
-   **API contract** for the full definition). Times are seconds-since-midnight;
-   all fields except the addresses are optional. The schema requires **≥1 stop**
-   and **≥1 vehicle**; with a single stop there is nothing to sequence, so
-   expect real requests to carry ≥2 stops. Bad input makes the call reject with
-   a message naming the offending fields — relay it to the user.
+5. **Parse the request** into entity batches — depot row(s), vehicle rows, stop
+   rows (see the **API contract** for the row shapes). Times are
+   seconds-since-midnight; every row needs a caller-chosen `id` (the business
+   id every other tool refers to). The `address` string is the ONLY location
+   carrier — no tool takes or returns coordinates. A caller holding exact
+   coordinates sends them AS the address: a decimal `"lat, lng"` literal
+   (e.g. `"25.19882, 55.27939"`) resolves to that exact point and stays the
+   row's address label. A solve needs **≥1 stop**, **≥1 vehicle**
+   and a depot; with a single stop there is nothing to sequence, so expect
+   real requests to carry ≥2 stops. Bad input makes a call reject with a
+   message naming the offending fields — relay it to the user.
 
-6. **Geocode + confirm.** Run
-   `await __r24call('routing24_geocode', { addresses: [<depot + every stop address>] })`.
-   - Show the user any row with `ok:false` (not found) and ask them to fix the
-     address. Also surface `matched` values that look wrong and confirm.
-   - Once confirmed, use the returned `lat`/`lng` for each entity (pass them in
-     the `routing24_optimize` input so you don't re-geocode). `routing24_optimize`
-     will geocode any address you leave without coordinates, but doing it here lets
-     the user confirm ambiguous matches first.
+6. **Start a fresh plan.** Everything from here on — confirmed addresses
+   included — lands in this plan:
+   ```js
+   await __r24call('routing24_new_plan', {}); // fresh EMPTY plan (replaces the loaded one)
+   ```
 
-7. **Start optimization.**
-   `await __r24call('routing24_optimize', { depot, stops, vehicles })`. It returns
-   quickly with `{ started: true, planUuid }`.
+7. **Confirm doubtful addresses.** The `routing24_upsert_*` tools geocode every
+   address internally, so pre-resolving is NOT needed. For the few addresses
+   you are unsure you read correctly (a typo you fixed, a part you could not
+   place), save them first with
+   `await __r24call('routing24_upsert_addresses', { addresses: [<those rows>] })`
+   — a batch of **at most 5 rows** returns `rows`, one per input, each with
+   `status` (`'geocoded' | 'ungeocoded'`) and the canonical `matched` text
+   the geocoder resolved (present only for rows geocoded by this call).
+   - Show the user any row with `status: 'ungeocoded'` (not found) and ask
+     them to fix the address. Also surface `matched` values that look wrong
+     and confirm.
+   - Then send the stop rows with the SAME address strings — they reuse the
+     locations already resolved, nothing is re-geocoded.
+
+8. **Create the entities and start optimization.** Build the plan piece by
+   piece, then solve it:
+   ```js
+   await __r24call('routing24_upsert_depots',   { depots:   [ /* depot rows */ ] });
+   await __r24call('routing24_upsert_vehicles', { vehicles: [ /* vehicle rows */ ] });
+   await __r24call('routing24_upsert_stops',    { stops:    [ /* stop rows, batches fine */ ] });
+   await __r24call('routing24_reoptimize_plan', {});
+   ```
+   Each upsert result carries `addressDiagnostics` when rows failed to geocode
+   or landed far from the rest — resolve those before solving.
+   `routing24_reoptimize_plan` returns quickly with
+   `{ started: true, planUuid, timeLimitS }` — `timeLimitS` is the solver's
+   time budget in seconds.
    - If the result carries `paidFeatures`, the plan uses constraints outside the
      user's subscription. `stripped` is empty while the free allowance lasts;
      once it is non-empty the solve **ignored** those constraints — carry that
-     into step 10 (see *Plans & paid features*).
+     into step 11 (see *Plans & paid features*).
 
-8. **Poll progress.** Every ~3 seconds run `await __r24call('routing24_status')`
-   until `phase === 'done'` or `phase === 'error'`.
+9. **Poll progress.** Poll by looping on routing24_status until phase is 'done' or 'error': while a solve runs each call holds its reply up to ~15s (returning early when the solve lands), so call it back-to-back — no sleep between calls is needed.
    - Relay `progress` (0–1) and, once available, `routes` / `distance` / `feasible`.
    - Small jobs finish in seconds; large ones can take minutes (keep the tab
      active). If `phase === 'error'`, report `error` and stop.
    - To abort on the user's request: `await __r24call('routing24_cancel')`.
 
-9. **Show + save.** Run `await __r24call('routing24_render')` (brings the routes
+10. **Show + save.** Run `await __r24call('routing24_render')` (brings the routes
    onto the map), then `await __r24call('routing24_save')` to persist and get
    `{ saved, planUrl }`.
    - To *show the user the map*, take a screenshot of the tab after render —
      the tools return JSON, not images.
-   - To read back the **full solution** (per-route ordered stops with resolved
-     addresses/coords, ETAs and loads, plus the unassigned list), call
-     `await __r24call('routing24_solution')`. It works both now and later on a
-     plan reopened by URL, so you never have to reconstruct routes from
-     `routing24_status` rollups.
+   - To read the solution back, call `await __r24call('routing24_status')` for
+     the overview (rollups + per-route `routeStats`), then
+     `await __r24call('routing24_route', { route })` for one route's ordered
+     stops (resolved addresses, ETAs, loads). Both work now and on a plan
+     reopened by URL. Read what's unserved and why with
+     `await __r24call('routing24_unassigned')`.
 
-10. **Report** to the user:
+11. **Report** to the user:
    - Number of routes, total distance (with unit), total duration, and any
      `unassignedCount` (stops that couldn't be served — mention them).
-   - The optimized **stop sequence per route** (pull it from
-     `routing24_solution` when the user wants the itinerary, not just totals).
+   - The optimized **stop sequence per route** (pull one route's stops from
+     `routing24_route` when the user wants the itinerary, not just totals).
    - Whether the solution is `feasible`.
-   - **Any `paidFeatures.stripped` from step 7** — name the constraints the
+   - **Any `paidFeatures.stripped` from step 8** — name the constraints the
      solve ignored and that upgrading restores them. A plan that quietly drops
      the user's tags, breaks or transfers is worse than no plan.
    - The **plan link** (`planUrl`) they can open, and note the map on screen shows
@@ -195,36 +222,45 @@ retry the call hoping for a different answer.
 Once a plan has a solution (fresh solve or a plan opened by URL), you can edit
 it in place — the same manual-editing engine the UI's drag & drop uses:
 
-1. **Read the current arrangement**: `await __r24call('routing24_solution')`.
-   Note each route's `slot` (0-based, empty routes included) and each stop's
-   `id` — edit ops address routes by slot and stops by id.
-2. **Compose ONE batch** of ops in `routing24_edit` and apply it atomically:
-   move/re-plan stops (`move_sites` — anchor with `before`/`after` a planned
-   stop id, or `to_route` + `placement: 'append' | 'best'`), `unassign_sites`,
-   `set_route_vehicle`, `create_route`, `remove_routes` (empty routes only),
-   `split_route`, `merge_routes`, `mark_user_assigned` / `clear_user_assigned`.
-   Later ops see earlier ops' effects; the first rejection rolls back the whole
-   batch (`rejection.code` says why — `stale_revision` means the plan changed
-   under you: re-read `routing24_solution` and rebuild the batch).
+1. **Read the current arrangement**: `await __r24call('routing24_status')` for
+   the per-route `routeStats` (each carries `route`, the 1-based on-screen
+   route number, empty routes included) and
+   `await __r24call('routing24_route', { route })` for a route's stop
+   `id`s — every tool addresses routes by that same `route` number and
+   stops by `id`.
+2. **Call the tool for the action** — one tool per action, one flat input each,
+   nothing to compose: `routing24_edit_move_stops` (anchor with
+   `before`/`after` a planned stop id, or `to_route` +
+   `placement: 'append' | 'best'`), `routing24_edit_unassign_stops`,
+   `routing24_edit_set_route_vehicle`, `routing24_edit_create_route`,
+   `routing24_edit_remove_routes` (unassigns any stops still on them, same
+   atomic edit), `routing24_edit_split_route`, `routing24_edit_merge_routes`,
+   `routing24_edit_mark_user_assigned` / `routing24_edit_clear_user_assigned`.
+   Each call applies atomically and is one undo entry; a rejection says why in
+   `rejection.code` (`stale_revision` = the plan changed under you: re-read
+   `routing24_status` and retry).
 3. **Judge the result, don't guess**: edits are never rejected for breaking
    constraints — problems are REPORTED instead. Check `state.feasible`,
    `state.problemsCount`, per-route `problems`, and `userAssignedReports`
    (per manually-placed stop: `intrinsic` = would violate anywhere,
    `introduced` = caused by this placement). If a placement looks bad, fix it
-   with another batch or `routing24_undo`.
+   with another call or `routing24_undo`.
    **Always check `state.driftFromOptimized`** — how far the plan has moved
    from the last full solve (the user's own manual edits count too). When
    `severity` is `degraded` or `severe` you MUST tell the user, quoting
    `summary` — it leads with the COST change, the number the user pays
    (e.g. "cost +2348 (+12.3%), distance +12.4%, 1 new problem vs the last
-   optimization") — and offer a fix: `routing24_optimize_route` for a single
-   rough route, or a fresh `routing24_optimize`. Report `improved` drift
-   too — it reinforces that the edits helped.
-4. **Tidy up**: `routing24_optimize_route` re-sequences one rough route
-   (sub-second, synchronous); `remove_routes` deletes emptied routes —
-   slots COMPACT afterwards, so always take fresh slots from the returned
-   `state.routes`.
-5. **Explain unassigned stops**: `routing24_solution` with
+   optimization") — and stop there. An edit the user asked for is expected
+   to cost more; never re-optimize (or propose it) to walk one back.
+   Report `improved` drift too — it reinforces that the edits helped.
+4. **Re-optimize only on the user's request**: `routing24_reoptimize_route`
+   re-sequences one rough route (sub-second, synchronous; membership stays),
+   `routing24_reoptimize_plan` recomputes the whole arrangement — both replace
+   manual edits in their scope, so when `status.undoDepth > 0` confirm with
+   the user first. `routing24_edit_remove_routes` deletes routes — the
+   remaining routes RENUMBER afterwards, so always take fresh route numbers
+   from the returned `state.routes`.
+5. **Explain unassigned stops**: `routing24_unassigned` with
    `{ refresh_diagnostics: true }` returns `unassignedDiagnostics` — a prose
    summary + per-site category/explanation/blockers/levers you can relay.
 6. **Save** with `routing24_save` when the user is happy.
@@ -233,7 +269,7 @@ While you edit, the app locks behind a full-screen **"Agent controlled"**
 overlay (blue dashed frame + a floating pane at the bottom) so the user can't
 race you; they resume via its **Take control** button. `routing24_undo` /
 `routing24_redo` walk the SAME history as the user's own edits — never undo
-speculatively; prefer a compensating `routing24_edit` batch.
+speculatively; prefer a compensating `routing24_edit_*` call.
 
 ## Reference files
 
@@ -247,7 +283,7 @@ Load these only as the task calls for them (progressive disclosure):
 
 ## Version & keeping current
 
-- This skill is **version 1.2.1**. Its bundled reference
+- This skill is **version 5.0.0**. Its bundled reference
   (`references/api.md` + `references/schema.json`) is generated from Routing24's
   own types and is correct as of this version.
 - The **always-current** copy of the full contract is served at
@@ -270,7 +306,9 @@ Load these only as the task calls for them (progressive disclosure):
   to show the user the map, call `routing24_render` then screenshot the tab.
 - Prefer `document.modelContext`; `navigator.modelContext` is a deprecated
   alias kept for older hosts.
-- `routing24_optimize` starts a **new plan** each time. When the user is
+- `routing24_new_plan` starts a **new plan** each time (replacing the loaded
+  one — the app asks the user to confirm when the open plan holds data, and
+  auto-saves unsaved changes first). When the user is
   **anonymous**, the plan is stored **only in this browser on this computer** and
   may be deleted later, so the plan link opens only here — it is not a durable
   share link. Say this when you hand over the link. (Signing in before saving
@@ -279,38 +317,41 @@ Load these only as the task calls for them (progressive disclosure):
 - If `routing24_status` never leaves `matrix`/`solving`, the network (matrix
   service) or the solve may be slow — keep polling; only treat it as failed on
   `phase:'error'`.
-- **Editing needs a solved plan** (`routing24_solution` reports
-  `available:true`) and refuses while a full solve runs
-  (`errorCode:"solve_in_progress"`). Route `slot`s are 0-based and COMPACT
-  after `remove_routes` — always re-read them from the returned
-  `state.routes` or a fresh `routing24_solution`.
+- **Editing needs a solved plan** (`routing24_status` reports `phase:"done"`
+  with `routeStats`) and refuses while a full solve runs
+  (`errorCode:"solve_in_progress"`). Route numbers are 1-based (the
+  on-screen order) and RENUMBER after `routing24_edit_remove_routes` — always
+  re-read them
+  from the returned `state.routes` or a fresh `routing24_status`.
 - **Two failure channels on the editing tools**: `rejection.code` = the
   ENGINE refused the batch (structural: unknown ids, bad anchors,
   `stale_revision`, …); `errorCode` = the tool refused or failed around the
   engine (`solve_in_progress`, `no_solution`, `slot_out_of_range`, `route_too_small`, `optimize_running`, `nothing_to_undo`, `nothing_to_redo`, `session_error`).
   `session_error` means the editing
-  session itself failed and the app resynced — re-read `routing24_solution`
+  session itself failed and the app resynced — re-read `routing24_status`
   and retry ONCE.
 - **Edits are never rejected for violating constraints** — time windows,
   capacity etc. are scored and reported (`state.problemsCount`, per-route
   `problems`, `userAssignedReports`), exactly like the UI's manual drag &
   drop. Rejections are structural only (`rejection.code`: unknown ids, bad
-  anchors, non-empty route removal, `stale_revision`, …).
+  anchors, `stale_revision`, …).
 - While you edit, the app locks behind a full-screen **"Agent controlled"**
   overlay until the user clicks its "Take control" button — tell the user to
   take control from there when you hand the plan back. The user may also edit
   concurrently before your first edit: a `stale_revision` rejection means
-  re-read `routing24_solution` and rebuild your batch.
+  re-read `routing24_status` and rebuild your batch.
 - `routing24_undo`/`routing24_redo` walk the same history as the user's own
   manual edits — never undo blindly.
 - **`driftFromOptimized` is your metrics conscience.** It compares the CURRENT
   plan to the last full solve (baseline frozen at solve completion; only a new
   solve resets it) and covers ALL changes since — including edits the user made
-  by hand while you were away. On every `routing24_solution`/`routing24_status`
+  by hand while you were away. On every `routing24_status`
   read and in every edit result: `severity` `degraded`/`severe` MUST be
-  relayed to the user with the ready-made `summary`, plus an offer to
-  re-optimize. Absent drift = the plan predates the baseline feature or has no
-  completed solve — nothing to compare against.
+  relayed to the user with the ready-made `summary` — and nothing more: an
+  edit the user asked for is expected to cost more, and re-optimizing (or
+  proposing it) to walk one back is never your call. Absent drift = the plan
+  predates the baseline feature or has no completed solve — nothing to
+  compare against.
 - **Money, coverage and the objective are three separate registers — never
   mix them.** `cost` is money (report it to the user); `unassignedCount` is
   coverage (a count, never a cost); `objective` is the solver's comparison
@@ -320,15 +361,16 @@ Load these only as the task calls for them (progressive disclosure):
   `objective.total`). Unassigning a stop always WORSENS the plan even when
   `cost` falls — never present dropping stops as savings, and never quote
   `objective` numbers as money. (Distinct from the vehicle cost INPUTS on
-  `routing24_optimize`, where `cost.duration`/`cost.overtime` are per-hour
+  `routing24_upsert_vehicles`, where `cost.duration`/`cost.overtime` are per-hour
   rates.)
-- **Marginal costs are estimates, never sums.** `insertionQuotes` (cheapest
-  way to serve an unassigned order) and per-stop `marginalCost` (removal
-  saving) are real money/seconds and safe to quote — but they hold for the
-  CURRENT arrangement only: never add them up across orders, and re-read
-  after any edit or re-optimize (`refresh_diagnostics` when
-  `diagnosticsStale`). To act on a quote, replay it as `move_sites` with
-  its `before`/`after` anchor.
+- **Marginal costs are estimates, never sums.** `insertionQuotes` (from
+  `routing24_unassigned` — the cheapest way to serve an unassigned order) and
+  per-stop `marginalCost` (from `routing24_route` — the removal saving) are
+  real money/seconds and safe to quote — but they hold for the CURRENT
+  arrangement only: never add them up across orders, and re-read after any edit
+  or re-optimize (`refresh_diagnostics` when `diagnosticsStale`). To act on a
+  quote, replay it with `routing24_edit_move_stops` and its `before`/`after`
+  anchor.
 - **Units**: `max_distance` (vehicle constraint) and every returned distance
   use the plan's display unit (`distanceUnit`: km or mi); `cost.duration` and
   `cost.overtime` are per hour; `cost.load_distance` is per load unit per
