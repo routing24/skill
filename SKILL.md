@@ -25,7 +25,7 @@ compatibility: >-
   API key is needed, and no sign-in: the full flow works anonymously.
 metadata:
   author: Routinghub LLC
-  version: "5.0.0"
+  version: "6.0.0"
 ---
 
 # Routing24 route optimizer
@@ -283,7 +283,7 @@ Load these only as the task calls for them (progressive disclosure):
 
 ## Version & keeping current
 
-- This skill is **version 5.0.0**. Its bundled reference
+- This skill is **version 6.0.0**. Its bundled reference
   (`references/api.md` + `references/schema.json`) is generated from Routing24's
   own types and is correct as of this version.
 - The **always-current** copy of the full contract is served at
@@ -363,6 +363,15 @@ Load these only as the task calls for them (progressive disclosure):
   `objective` numbers as money. (Distinct from the vehicle cost INPUTS on
   `routing24_upsert_vehicles`, where `cost.duration`/`cost.overtime` are per-hour
   rates.)
+- **Explaining a cost = walking `cost.components`.** The lines sum to
+  `cost.total`, each named by `kind`; a route's cost from `routing24_route`
+  adds the serving vehicle's effective `rate`/`quantity`/`unit` per line so
+  the user can verify the arithmetic (`amount` stays authoritative when the
+  product differs). `OptimizeStatus.costModel` is the pricing the solve
+  actually used: when `priced` is false no cost is configured and
+  `cost.total` is plain travel distance in yards/metres — quote its `note`.
+  A rate in `defaultRates` (or a `defaultRate: true` line) is an ENGINE
+  DEFAULT, blank in the app — call it a default, never a cost the user set.
 - **Marginal costs are estimates, never sums.** `insertionQuotes` (from
   `routing24_unassigned` — the cheapest way to serve an unassigned order) and
   per-stop `marginalCost` (from `routing24_route` — the removal saving) are

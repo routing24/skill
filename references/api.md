@@ -1,6 +1,6 @@
 # Routing24 route optimizer — API reference
 
-> Generated from Routing24's own types (skill version 5.0.0). The
+> Generated from Routing24's own types (skill version 6.0.0). The
 > always-current copy is served at https://routing24.com/llms.txt.
 
 WebMCP tools registered on `document.modelContext` on every
@@ -73,6 +73,7 @@ type OptimizeStatus = {
     complete?: boolean;  // True when the solve ran to completion (not cancelled part-way).
     cost?: SolutionCost;  // Economic cost (money) of the whole plan. Coverage is `unassignedCount`, never a cost. Absent on pre-feature solutions.
     objective?: SolverObjective;  // Solver comparison scalar — see {@link SolverObjective}; never money.
+    costModel?: CostModel;  // The per-unit pricing this solve used, fallbacks included — see {@link CostModel}. Absent mid-solve and on pre-feature solutions.
     routeStats?: RouteBrief[];  // One compact entry per route (empty routes included), in on-screen order: vehicle, stop count, distance, duration, feasibility and cost per route — NO stop list. Drill into one route's ordered stops with `routing24_route`.
     revision?: number;  // Session revision the routes reflect (present once an editing session is open); bumps on every committed edit.
     undoDepth?: number;  // Committed edits `routing24_undo` can walk back.
@@ -86,10 +87,10 @@ type OptimizeStatus = {
 // The shared fields are {@link PlanSolutionRoute}'s, defined once there.
 type RouteBrief = {
     cost?: RouteCost;  // Economic cost of this route (absent on pre-feature solutions).
+    distance: number;  // Total travel distance of the route, in `distanceUnit`.
     route: number;  // 1-based route number, matching the on-screen order — the SAME number every route-addressed tool takes (`routing24_route`, `routing24_reoptimize_route`, the `routing24_edit_*` `to_route`/`route`/ `target`/`sources` fields). Numbers renumber after `routing24_edit_remove_routes`; re-read them from the returned state.
     vehicleId?: string;  // Id of the vehicle serving this route.
     stopCount: number;  // Count of site stops served (the depot start/end are excluded).
-    distance: number;  // Total travel distance of the route, in `distanceUnit`.
     durationHours: number;  // Total route duration (travel + service + wait), hours.
     feasible?: boolean;  // True when every constraint on this route is satisfied.
     problemsCount?: number;  // Constraint-problem markers on this route (0 = feasible); read the problems themselves from `routing24_route`.
@@ -101,12 +102,57 @@ type RouteBrief = {
 // NOT include unassigned-order penalties — coverage is a count
 // (`unassignedCount`), not a cost. Absent on pre-feature solutions.
 type SolutionCost = {
-    total: number;  // Full economic cost: fixed + distance + duration (incl. overtime) + stop + ride overtime + load-distance.
-    overtime: number;  // Overtime premium — a breakdown line already inside `total`.
-    vehicle: number;  // `total` minus `overtime`.
-    stop?: number;  // Per-stop cost addend inside `total` (absent when no vehicle prices stops).
-    rideOvertime?: number;  // Cost of the linked orders' ride time inside their overtime band, at the serving vehicle's `cost.ride_overtime` — an addend inside `vehicle` (absent when no route ran into a priced band).
-    loadDistance?: number;  // Carriage cost: load on board times leg length, summed over legs, at each serving vehicle's `cost.load_distance` — an addend inside `vehicle` (absent when no vehicle prices load-distance).
+    total: number;  // Full economic cost = Σ `components[].amount` (2-decimal rounding).
+    components: CostComponent[];  // The solver's own decomposition of `total` — every charged line, zero lines omitted. Plan-level lines carry amounts and plan-wide quantities but NO rates (rates can differ per vehicle — read `OptimizeStatus.costModel`, or one route's cost from `routing24_route`, for rate-level verification).
+};
+```
+```ts
+// One line of a cost total. Self-describing: a future pricing element arrives
+// as a new `kind`, never a new shape. `amount` is the solver's authoritative
+// money value; when `rate` and `quantity` are present, `amount` ≈ `rate` ×
+// `quantity` (2-decimal rounding; a force-placed stop on a restricted leg may
+// legitimately price below that — `amount` wins).
+type CostComponent = {
+    kind: "fixed" | "distance" | "duration" | "overtime" | "stop" | "rideOvertime" | "loadDistance" | "other";  // `fixed` per-use vehicle cost; `distance` travel priced per mi/km; `duration` route time priced per hour, EXCLUDING the overtime premium — `overtime` (the surcharge for hours past the regular limit) is its own line, so lines always sum to `total`; `stop` per-visit fees; `rideOvertime` linked orders' ride time inside their overtime band; `loadDistance` carriage (load on board × leg length); `other` unattributed remainder (rare — solutions saved by older app versions).
+    amount: number;  // Money — an addend of the parent `total`. Report this.
+    rate?: number;  // Effective per-`unit` rate the solve used (on `routing24_route` costs only) — the authored rate after the engine's fixed-point precision (e.g. an authored 1/hour bills as 1.08/hour), so it can differ slightly from the vehicle's configured value. See `defaultRate` before presenting it as configured.
+    quantity?: number;  // Billed quantity, in `unit`.
+    unit?: "km" | "mi" | "stop" | "h" | "load-mi" | "load-km";  // Unit of `quantity` (and denominator of `rate`). Distance units are the SOLVE-TIME display unit; `load-mi`/`load-km` = load unit × mile/km.
+    defaultRate?: true;  // The `rate` is an engine DEFAULT — the matching vehicle cost field is blank in the app, the engine supplied the value (see {@link VehicleEffectiveRates}.`defaultRates`). Call it a default; never present it as a cost the user configured.
+};
+```
+```ts
+// The pricing this solve ACTUALLY used — the vehicles' authored cost rates
+// after the engine's fallbacks. `priced: false` means NO vehicle prices
+// distance, duration or load-distance: the optimizer then minimizes plain
+// travel distance (every vehicle priced at 1 per yard/metre), so `cost.total`
+// is literally the plan's travel distance in yards/metres — quote `note` when
+// explaining. Absent on pre-feature solutions.
+type CostModel = {
+    priced: boolean;
+    note?: string;  // Ready-to-quote explanation, present when `priced` is false.
+    distanceUnit: "km" | "mi";  // Solve-time display distance unit the rates are stated in.
+    vehicles: VehicleEffectiveRates[];  // Effective per-unit rates per vehicle type.
+};
+```
+```ts
+// One vehicle type's effective rates, in `CostModel.distanceUnit` and hours:
+// `fixed` per route driven, `distance` per mi/km, `duration` / `overtime` /
+// `rideOvertime` per hour, `stop` per stop served, `loadDistance` per load
+// unit per mi/km. An omitted rate = 0 (not charged). Rates are what the
+// engine BILLS — the authored value at the engine's fixed-point precision
+// (an authored 1/hour bills as 1.08/hour); the authored values themselves
+// are on the vehicle rows (`routing24_list_vehicles`).
+type VehicleEffectiveRates = {
+    vehicleId: string;
+    fixed?: number;
+    distance?: number;
+    duration?: number;
+    stop?: number;
+    overtime?: number;
+    rideOvertime?: number;
+    loadDistance?: number;
+    defaultRates?: ("distance" | "overtime")[];  // Rates the ENGINE supplied — the vehicle's matching cost field is blank in the app: `distance` when the fleet is unpriced (1 per yard/metre = 1760/mi or 1000/km), `overtime` when overtime is allowed but unpriced (priced at the vehicle's hourly rate, else a nominal 1/hour). Call these defaults; never present one as a cost the user configured.
 };
 ```
 ```ts
@@ -169,13 +215,28 @@ type EntityKindDiff = {
     changed: integer;  // >= 0
 };
 ```
-- Two registers, never mixed: `cost` is MONEY (the task's unit costs;
-  `cost.overtime` is a line inside `cost.total`, not an addend) and coverage
-  is a COUNT (`unassignedCount`; the ids/reasons are in `routing24_unassigned`).
-  `objective` is the solver's comparison scalar in synthetic units — lower =
-  better plan, and it already prices every unassigned order above any possible
-  serving cost, so dropping stops NEVER improves it. Never quote `objective` as
-  money. Hand rule: fewer unassigned wins; ties break on lower `cost.total`.
+- Two registers, never mixed: `cost` is MONEY (the task's unit costs) and
+  coverage is a COUNT (`unassignedCount`; the ids/reasons are in
+  `routing24_unassigned`). `objective` is the solver's comparison scalar in
+  synthetic units — lower = better plan, and it already prices every unassigned
+  order above any possible serving cost, so dropping stops NEVER improves it.
+  Never quote `objective` as money. Hand rule: fewer unassigned wins; ties
+  break on lower `cost.total`.
+- To explain a cost, walk `cost.components`: the lines sum to `cost.total`
+  and each names its `kind` (a route's cost from `routing24_route` adds
+  `rate`/`quantity`/`unit` per line for arithmetic the user can verify).
+  Cross-check with `rate × quantity`, but the solver's `amount` is the
+  authoritative value — report it even when the product differs (a force-placed
+  stop on a restricted leg can legitimately price below the product).
+- `costModel` is the pricing the solve ACTUALLY used: the authored rates at
+  the engine's fixed-point precision (an authored 1/hour bills as 1.08/hour —
+  quote these effective rates when explaining amounts; the authored values are
+  on the vehicle rows). When `priced` is false, no cost is configured
+  anywhere and `cost.total` is plain travel distance in yards/metres — quote
+  `note` instead of presenting it as money. A rate listed in a vehicle's
+  `defaultRates` (and a component's `defaultRate`) is an ENGINE DEFAULT:
+  that cost field is blank in the app, so say "default rate", never "you set
+  this cost".
 - `driftFromOptimized` compares the CURRENT plan to the last full solve and
   covers every change since it — the user's manual edits included. On
   `severity: "degraded" | "severe"` you MUST tell the user (quote `summary`)
@@ -242,15 +303,13 @@ type PlanSolutionStop = {
 };
 ```
 ```ts
-// One route's ECONOMIC cost, in the task's money units. Same shape rules as
-// {@link SolutionCost}.
+// One route's ECONOMIC cost, in the task's money units. `total` =
+// Σ `components[].amount`. In `routeStats` and session route summaries the
+// lines carry amounts only; `routing24_route` adds the serving vehicle's
+// effective `rate`/`quantity`/`unit` per line.
 type RouteCost = {
-    total: number;  // Full economic cost of the route: fixed + distance + duration (incl. overtime) + stop + ride overtime + load-distance.
-    overtime: number;  // Overtime premium inside `total`.
-    vehicle: number;  // `total` minus `overtime`.
-    stop?: number;  // Per-stop cost addend inside `total` (absent when the vehicle has no stop cost).
-    rideOvertime?: number;  // Cost of this route's linked orders' ride time inside their overtime band, at the vehicle's `cost.ride_overtime` — an addend inside `vehicle` (absent when the route ran into no priced band).
-    loadDistance?: number;  // This route's carriage cost: load on board times leg length, summed over legs, at the vehicle's `cost.load_distance` — an addend inside `vehicle` (absent when the vehicle prices no load-distance).
+    total: number;
+    components: CostComponent[];
 };
 ```
 ```ts
@@ -262,6 +321,11 @@ type PlanProblem = {
     classes?: string[];  // Conflicting load-class names (`incompatible_load_class` only).
 };
 ```
+- `cost.components` here carry the serving vehicle's effective `rate`,
+  billed `quantity` and `unit` (solve-time units) — the full verifiable
+  breakdown of this route's cost. `defaultRate: true` marks an engine-default
+  rate (the vehicle's cost field is blank in the app; see
+  `OptimizeStatus.costModel`).
 - Per-stop `marginalCost`/`marginalDurationS` are the removal saving: what
   serving that stop adds to its route, in REAL money/seconds. An estimate for
   the CURRENT arrangement — never sum across stops, and re-read after any edit.

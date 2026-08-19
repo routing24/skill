@@ -165,6 +165,10 @@
             "$ref": "#/components/schemas/SolverObjective",
             "description": "Solver comparison scalar — see {@link SolverObjective}; never money."
           },
+          "costModel": {
+            "$ref": "#/components/schemas/CostModel",
+            "description": "The per-unit pricing this solve used, fallbacks included — see\n{@link CostModel}. Absent mid-solve and on pre-feature solutions."
+          },
           "routeStats": {
             "type": "array",
             "items": {
@@ -298,35 +302,99 @@
         "properties": {
           "total": {
             "type": "number",
-            "description": "Full economic cost: fixed + distance + duration (incl. overtime) + stop\n+ ride overtime + load-distance."
+            "description": "Full economic cost = Σ `components[].amount` (2-decimal rounding)."
           },
-          "overtime": {
-            "type": "number",
-            "description": "Overtime premium — a breakdown line already inside `total`."
-          },
-          "vehicle": {
-            "type": "number",
-            "description": "`total` minus `overtime`."
-          },
-          "stop": {
-            "type": "number",
-            "description": "Per-stop cost addend inside `total` (absent when no vehicle prices stops)."
-          },
-          "rideOvertime": {
-            "type": "number",
-            "description": "Cost of the linked orders' ride time inside their overtime band, at the\nserving vehicle's `cost.ride_overtime` — an addend inside `vehicle`\n(absent when no route ran into a priced band)."
-          },
-          "loadDistance": {
-            "type": "number",
-            "description": "Carriage cost: load on board times leg length, summed over legs, at\neach serving vehicle's `cost.load_distance` — an addend inside\n`vehicle` (absent when no vehicle prices load-distance)."
+          "components": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CostComponent"
+            },
+            "description": "The solver's own decomposition of `total` — every charged line, zero\nlines omitted. Plan-level lines carry amounts and plan-wide quantities\nbut NO rates (rates can differ per vehicle — read\n`OptimizeStatus.costModel`, or one route's cost from `routing24_route`,\nfor rate-level verification)."
           }
         },
         "required": [
           "total",
-          "overtime",
-          "vehicle"
+          "components"
         ],
         "description": "ECONOMIC cost of the solution, in the task's money units (the unit costs\nconfigured on the vehicles). Report money to the user from here. It does\nNOT include unassigned-order penalties — coverage is a count\n(`unassignedCount`), not a cost. Absent on pre-feature solutions."
+      },
+      "CostComponent": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "oneOf": [
+              {
+                "const": "fixed"
+              },
+              {
+                "const": "distance"
+              },
+              {
+                "const": "duration"
+              },
+              {
+                "const": "overtime"
+              },
+              {
+                "const": "stop"
+              },
+              {
+                "const": "rideOvertime"
+              },
+              {
+                "const": "loadDistance"
+              },
+              {
+                "const": "other"
+              }
+            ],
+            "description": "`fixed` per-use vehicle cost; `distance` travel priced per mi/km;\n`duration` route time priced per hour, EXCLUDING the overtime premium —\n`overtime` (the surcharge for hours past the regular limit) is its own\nline, so lines always sum to `total`; `stop` per-visit fees;\n`rideOvertime` linked orders' ride time inside their overtime band;\n`loadDistance` carriage (load on board × leg length); `other`\nunattributed remainder (rare — solutions saved by older app versions)."
+          },
+          "amount": {
+            "type": "number",
+            "description": "Money — an addend of the parent `total`. Report this."
+          },
+          "rate": {
+            "type": "number",
+            "description": "Effective per-`unit` rate the solve used (on `routing24_route` costs\nonly) — the authored rate after the engine's fixed-point precision\n(e.g. an authored 1/hour bills as 1.08/hour), so it can differ\nslightly from the vehicle's configured value. See `defaultRate`\nbefore presenting it as configured."
+          },
+          "quantity": {
+            "type": "number",
+            "description": "Billed quantity, in `unit`."
+          },
+          "unit": {
+            "oneOf": [
+              {
+                "const": "km"
+              },
+              {
+                "const": "mi"
+              },
+              {
+                "const": "stop"
+              },
+              {
+                "const": "h"
+              },
+              {
+                "const": "load-mi"
+              },
+              {
+                "const": "load-km"
+              }
+            ],
+            "description": "Unit of `quantity` (and denominator of `rate`). Distance units are the\nSOLVE-TIME display unit; `load-mi`/`load-km` = load unit × mile/km."
+          },
+          "defaultRate": {
+            "const": true,
+            "description": "The `rate` is an engine DEFAULT — the matching vehicle cost field is\nblank in the app, the engine supplied the value (see\n{@link VehicleEffectiveRates}.`defaultRates`). Call it a default;\nnever present it as a cost the user configured."
+          }
+        },
+        "required": [
+          "kind",
+          "amount"
+        ],
+        "description": "One line of a cost total. Self-describing: a future pricing element arrives\nas a new `kind`, never a new shape. `amount` is the solver's authoritative\nmoney value; when `rate` and `quantity` are present, `amount` ≈ `rate` ×\n`quantity` (2-decimal rounding; a force-placed stop on a restricted leg may\nlegitimately price below that — `amount` wins)."
       },
       "SolverObjective": {
         "type": "object",
@@ -346,12 +414,99 @@
         ],
         "description": "The scalar the solver minimizes — SOLVER UNITS, NOT MONEY, never quote it\nto the user. Each unassigned order carries a synthetic penalty priced\nabove any possible serving cost, so fewer-unassigned always outranks\ncheaper-routes. Use it ONLY to compare two states of the same plan:\nlower `objective.total` = better plan. Equivalent hand rule: fewer\nunassigned wins; ties break on lower `cost.total`."
       },
+      "CostModel": {
+        "type": "object",
+        "properties": {
+          "priced": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": "string",
+            "description": "Ready-to-quote explanation, present when `priced` is false."
+          },
+          "distanceUnit": {
+            "oneOf": [
+              {
+                "const": "km"
+              },
+              {
+                "const": "mi"
+              }
+            ],
+            "description": "Solve-time display distance unit the rates are stated in."
+          },
+          "vehicles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VehicleEffectiveRates"
+            },
+            "description": "Effective per-unit rates per vehicle type."
+          }
+        },
+        "required": [
+          "priced",
+          "distanceUnit",
+          "vehicles"
+        ],
+        "description": "The pricing this solve ACTUALLY used — the vehicles' authored cost rates\nafter the engine's fallbacks. `priced: false` means NO vehicle prices\ndistance, duration or load-distance: the optimizer then minimizes plain\ntravel distance (every vehicle priced at 1 per yard/metre), so `cost.total`\nis literally the plan's travel distance in yards/metres — quote `note` when\nexplaining. Absent on pre-feature solutions."
+      },
+      "VehicleEffectiveRates": {
+        "type": "object",
+        "properties": {
+          "vehicleId": {
+            "type": "string"
+          },
+          "fixed": {
+            "type": "number"
+          },
+          "distance": {
+            "type": "number"
+          },
+          "duration": {
+            "type": "number"
+          },
+          "stop": {
+            "type": "number"
+          },
+          "overtime": {
+            "type": "number"
+          },
+          "rideOvertime": {
+            "type": "number"
+          },
+          "loadDistance": {
+            "type": "number"
+          },
+          "defaultRates": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "const": "distance"
+                },
+                {
+                  "const": "overtime"
+                }
+              ]
+            },
+            "description": "Rates the ENGINE supplied — the vehicle's matching cost field is blank\nin the app: `distance` when the fleet is unpriced (1 per yard/metre =\n1760/mi or 1000/km), `overtime` when overtime is allowed but unpriced\n(priced at the vehicle's hourly rate, else a nominal 1/hour). Call\nthese defaults; never present one as a cost the user configured."
+          }
+        },
+        "required": [
+          "vehicleId"
+        ],
+        "description": "One vehicle type's effective rates, in `CostModel.distanceUnit` and hours:\n`fixed` per route driven, `distance` per mi/km, `duration` / `overtime` /\n`rideOvertime` per hour, `stop` per stop served, `loadDistance` per load\nunit per mi/km. An omitted rate = 0 (not charged). Rates are what the\nengine BILLS — the authored value at the engine's fixed-point precision\n(an authored 1/hour bills as 1.08/hour); the authored values themselves\nare on the vehicle rows (`routing24_list_vehicles`)."
+      },
       "RouteBrief": {
         "type": "object",
         "properties": {
           "cost": {
             "$ref": "#/components/schemas/RouteCost",
             "description": "Economic cost of this route (absent on pre-feature solutions)."
+          },
+          "distance": {
+            "type": "number",
+            "description": "Total travel distance of the route, in `distanceUnit`."
           },
           "route": {
             "type": "number",
@@ -364,10 +519,6 @@
           "stopCount": {
             "type": "number",
             "description": "Count of site stops served (the depot start/end are excluded)."
-          },
-          "distance": {
-            "type": "number",
-            "description": "Total travel distance of the route, in `distanceUnit`."
           },
           "durationHours": {
             "type": "number",
@@ -383,9 +534,9 @@
           }
         },
         "required": [
+          "distance",
           "route",
           "stopCount",
-          "distance",
           "durationHours"
         ],
         "description": "One route's compact stats in {@link OptimizeStatus}.`routeStats` — totals\nonly, no stop list. Drill into the ordered stops with `routing24_route(route)`.\nThe shared fields are {@link PlanSolutionRoute}'s, defined once there."
@@ -394,36 +545,20 @@
         "type": "object",
         "properties": {
           "total": {
-            "type": "number",
-            "description": "Full economic cost of the route: fixed + distance + duration (incl.\novertime) + stop + ride overtime + load-distance."
+            "type": "number"
           },
-          "overtime": {
-            "type": "number",
-            "description": "Overtime premium inside `total`."
-          },
-          "vehicle": {
-            "type": "number",
-            "description": "`total` minus `overtime`."
-          },
-          "stop": {
-            "type": "number",
-            "description": "Per-stop cost addend inside `total` (absent when the vehicle has no stop cost)."
-          },
-          "rideOvertime": {
-            "type": "number",
-            "description": "Cost of this route's linked orders' ride time inside their overtime\nband, at the vehicle's `cost.ride_overtime` — an addend inside `vehicle`\n(absent when the route ran into no priced band)."
-          },
-          "loadDistance": {
-            "type": "number",
-            "description": "This route's carriage cost: load on board times leg length, summed\nover legs, at the vehicle's `cost.load_distance` — an addend inside\n`vehicle` (absent when the vehicle prices no load-distance)."
+          "components": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CostComponent"
+            }
           }
         },
         "required": [
           "total",
-          "overtime",
-          "vehicle"
+          "components"
         ],
-        "description": "One route's ECONOMIC cost, in the task's money units. Same shape rules as\n{@link SolutionCost}."
+        "description": "One route's ECONOMIC cost, in the task's money units. `total` =\nΣ `components[].amount`. In `routeStats` and session route summaries the\nlines carry amounts only; `routing24_route` adds the serving vehicle's\neffective `rate`/`quantity`/`unit` per line."
       },
       "DataSyncStatus": {
         "type": "object",
