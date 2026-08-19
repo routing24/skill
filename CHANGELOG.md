@@ -3,6 +3,10 @@
 Version history of the generated `routing24-optimizer` skill content (SKILL.md +
 references/*) and `llms.txt`. Generated; do not edit by hand.
 
+## 6.1.0
+
+Unpriced fleets get a real default objective: when no vehicle prices distance, duration or load-distance, the optimizer now bills 1 per mile (or km, per the plan's display unit) PLUS 1 per hour — previously 1 per yard/metre and nothing for time — so `cost.total` reads roughly as miles(km) + hours instead of raw distance in matrix units. `VehicleEffectiveRates.defaultRates` may now contain `duration` (alongside `distance`/`overtime`), and the unpriced `costModel.note` names the new defaults. Rate quantization is finer too: the engine's fixed-point step is now 1e-6 per wire unit, eliminating the old visible 1.08/hour quantization error — an effective rate now matches the authored one at the 2 decimals these surfaces report. Routes for unpriced plans can change — time now steers the optimization, as the product copy always said.
+
 ## 6.0.0
 
 BREAKING — cost objects are self-describing: `SolutionCost` and `RouteCost` are now `{ total, components[] }` (the named `overtime`/`vehicle`/`stop`/`rideOvertime`/`loadDistance` fields are gone). Each `CostComponent` is one addend of `total` — `kind` (`fixed`/`distance`/`duration`/`overtime`/`stop`/`rideOvertime`/`loadDistance`/`other`) + `amount`; `overtime` is its own line now (no longer folded into duration), so lines always sum to `total`. On `routing24_route` every line adds the serving vehicle's effective `rate`, billed `quantity` and `unit` for user-verifiable arithmetic. New `OptimizeStatus.costModel` states the pricing the solve ACTUALLY used per vehicle, engine fallbacks marked in `defaultRates` (with `defaultRate: true` on the affected lines): in particular `priced: false` means no vehicle has any cost rate and `cost.total` is plain travel distance in yards/metres — the ready-to-quote `note` explains it. Why: "what does 43000 mean?" was unanswerable from `{ total, overtime, vehicle }`, and a default rate presented as a configured cost misled users.

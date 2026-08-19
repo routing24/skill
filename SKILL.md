@@ -25,7 +25,7 @@ compatibility: >-
   API key is needed, and no sign-in: the full flow works anonymously.
 metadata:
   author: Routinghub LLC
-  version: "6.0.0"
+  version: "6.1.0"
 ---
 
 # Routing24 route optimizer
@@ -283,7 +283,7 @@ Load these only as the task calls for them (progressive disclosure):
 
 ## Version & keeping current
 
-- This skill is **version 6.0.0**. Its bundled reference
+- This skill is **version 6.1.0**. Its bundled reference
   (`references/api.md` + `references/schema.json`) is generated from Routing24's
   own types and is correct as of this version.
 - The **always-current** copy of the full contract is served at
@@ -369,7 +369,9 @@ Load these only as the task calls for them (progressive disclosure):
   the user can verify the arithmetic (`amount` stays authoritative when the
   product differs). `OptimizeStatus.costModel` is the pricing the solve
   actually used: when `priced` is false no cost is configured and
-  `cost.total` is plain travel distance in yards/metres — quote its `note`.
+  `cost.total` reads roughly as travel distance in miles/km plus total route
+  hours (driving + service + waiting) at the defaults of 1 per mile/km + 1
+  per hour — quote its `note`.
   A rate in `defaultRates` (or a `defaultRate: true` line) is an ENGINE
   DEFAULT, blank in the app — call it a default, never a cost the user set.
 - **Marginal costs are estimates, never sums.** `insertionQuotes` (from
@@ -384,12 +386,13 @@ Load these only as the task calls for them (progressive disclosure):
   use the plan's display unit (`distanceUnit`: km or mi); `cost.duration` and
   `cost.overtime` are per hour; `cost.load_distance` is per load unit per
   km/mi; all times are seconds-since-midnight.
-- **Vehicle cost inputs: omit, don't zero.** An omitted cost field is 0. When
-  the user gives no rates at all, send no `cost` objects — the optimizer then
-  minimizes plain travel distance. Never write `cost: { distance: 0,
-  duration: 0 }` to mean "no preference": an all-zero fleet has nothing to
-  optimize, so the zeros are ignored (distance is minimized) and the optimize
-  result returns a `warnings` entry you must relay. Explicit zeros are for
-  mixed fleets only, e.g. `{ id: "Bike", cost: { distance: 0, duration: 6 } }`
-  next to `{ id: "Van", cost: { distance: 2, duration: 18, fixed: 40 } }`
-  makes mileage free on the bike and priced on the van.
+- **Vehicle cost inputs: omit, don't zero.** An omitted cost field is 0. To
+  minimize distance and time, omit `cost` entirely — do not send zeros: the
+  optimizer then prices every vehicle at the defaults of 1 per mile/km plus 1
+  per hour. Never write `cost: { distance: 0, duration: 0 }` to mean "no
+  preference": an all-zero fleet has nothing to optimize, so the zeros are
+  ignored (the same defaults apply) and the optimize result returns a
+  `warnings` entry you must relay. Explicit zeros are for mixed fleets only,
+  e.g. `{ id: "Bike", cost: { distance: 0, duration: 6 } }` next to
+  `{ id: "Van", cost: { distance: 2, duration: 18, fixed: 40 } }` makes
+  mileage free on the bike and priced on the van.

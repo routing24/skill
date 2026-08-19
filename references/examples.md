@@ -53,8 +53,9 @@ await __r24call('routing24_upsert_vehicles', {
         // 4.5 h driving, splittable 15+30);
         // US = { max_driving_s: 28800, duration_s: 1800, service_counts: true }. Omit for no breaks.
         // cost: only when the user gives real rates (per km/mi, per hour,
-        // fixed per use) — omit it entirely (as here) to minimize plain
-        // distance; never send zeros for that. Explicit 0 is for mixed
+        // fixed per use) — omit it entirely (as here) to minimize
+        // distance and time at the defaults of 1 per mile(km) + 1 per
+        // hour; never send zeros for that. Explicit 0 is for mixed
         // fleets: { cost: { distance: 0, duration: 6 } } bike vs
         // { cost: { distance: 2, duration: 18, fixed: 40 } } van.
         {

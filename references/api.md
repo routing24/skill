@@ -1,6 +1,6 @@
 # Routing24 route optimizer — API reference
 
-> Generated from Routing24's own types (skill version 6.0.0). The
+> Generated from Routing24's own types (skill version 6.1.0). The
 > always-current copy is served at https://routing24.com/llms.txt.
 
 WebMCP tools registered on `document.modelContext` on every
@@ -115,7 +115,7 @@ type SolutionCost = {
 type CostComponent = {
     kind: "fixed" | "distance" | "duration" | "overtime" | "stop" | "rideOvertime" | "loadDistance" | "other";  // `fixed` per-use vehicle cost; `distance` travel priced per mi/km; `duration` route time priced per hour, EXCLUDING the overtime premium — `overtime` (the surcharge for hours past the regular limit) is its own line, so lines always sum to `total`; `stop` per-visit fees; `rideOvertime` linked orders' ride time inside their overtime band; `loadDistance` carriage (load on board × leg length); `other` unattributed remainder (rare — solutions saved by older app versions).
     amount: number;  // Money — an addend of the parent `total`. Report this.
-    rate?: number;  // Effective per-`unit` rate the solve used (on `routing24_route` costs only) — the authored rate after the engine's fixed-point precision (e.g. an authored 1/hour bills as 1.08/hour), so it can differ slightly from the vehicle's configured value. See `defaultRate` before presenting it as configured.
+    rate?: number;  // Effective per-`unit` rate the solve used (on `routing24_route` costs only) — the authored rate at the engine's fixed-point step (1e-6 per wire unit), rounded to 2 decimals here, so it normally equals the vehicle's configured value. See `defaultRate` before presenting it as configured.
     quantity?: number;  // Billed quantity, in `unit`.
     unit?: "km" | "mi" | "stop" | "h" | "load-mi" | "load-km";  // Unit of `quantity` (and denominator of `rate`). Distance units are the SOLVE-TIME display unit; `load-mi`/`load-km` = load unit × mile/km.
     defaultRate?: true;  // The `rate` is an engine DEFAULT — the matching vehicle cost field is blank in the app, the engine supplied the value (see {@link VehicleEffectiveRates}.`defaultRates`). Call it a default; never present it as a cost the user configured.
@@ -124,10 +124,11 @@ type CostComponent = {
 ```ts
 // The pricing this solve ACTUALLY used — the vehicles' authored cost rates
 // after the engine's fallbacks. `priced: false` means NO vehicle prices
-// distance, duration or load-distance: the optimizer then minimizes plain
-// travel distance (every vehicle priced at 1 per yard/metre), so `cost.total`
-// is literally the plan's travel distance in yards/metres — quote `note` when
-// explaining. Absent on pre-feature solutions.
+// distance, duration or load-distance: the optimizer then minimizes distance
+// and time together (every vehicle priced at the defaults of 1 per mile/km
+// plus 1 per hour), so `cost.total` reads roughly as the plan's travel
+// distance in miles/km plus its total route time in hours (driving + service
+// + waiting) — quote `note` when explaining. Absent on pre-feature solutions.
 type CostModel = {
     priced: boolean;
     note?: string;  // Ready-to-quote explanation, present when `priced` is false.
@@ -140,9 +141,10 @@ type CostModel = {
 // `fixed` per route driven, `distance` per mi/km, `duration` / `overtime` /
 // `rideOvertime` per hour, `stop` per stop served, `loadDistance` per load
 // unit per mi/km. An omitted rate = 0 (not charged). Rates are what the
-// engine BILLS — the authored value at the engine's fixed-point precision
-// (an authored 1/hour bills as 1.08/hour); the authored values themselves
-// are on the vehicle rows (`routing24_list_vehicles`).
+// engine BILLS — the authored value at the engine's fixed-point step (1e-6
+// per wire unit), rounded to 2 decimals here, so a rate normally equals the
+// authored one; the authored values themselves are on the vehicle rows
+// (`routing24_list_vehicles`).
 type VehicleEffectiveRates = {
     vehicleId: string;
     fixed?: number;
@@ -152,7 +154,7 @@ type VehicleEffectiveRates = {
     overtime?: number;
     rideOvertime?: number;
     loadDistance?: number;
-    defaultRates?: ("distance" | "overtime")[];  // Rates the ENGINE supplied — the vehicle's matching cost field is blank in the app: `distance` when the fleet is unpriced (1 per yard/metre = 1760/mi or 1000/km), `overtime` when overtime is allowed but unpriced (priced at the vehicle's hourly rate, else a nominal 1/hour). Call these defaults; never present one as a cost the user configured.
+    defaultRates?: ("distance" | "duration" | "overtime")[];  // Rates the ENGINE supplied — the vehicle's matching cost field is blank in the app: `distance` and `duration` when the fleet is unpriced (the defaults of 1 per mile/km and 1 per hour), `overtime` when overtime is allowed but unpriced (priced at the vehicle's hourly rate, else a nominal 1/hour). Call these defaults; never present one as a cost the user configured.
 };
 ```
 ```ts
@@ -228,12 +230,15 @@ type EntityKindDiff = {
   Cross-check with `rate × quantity`, but the solver's `amount` is the
   authoritative value — report it even when the product differs (a force-placed
   stop on a restricted leg can legitimately price below the product).
-- `costModel` is the pricing the solve ACTUALLY used: the authored rates at
-  the engine's fixed-point precision (an authored 1/hour bills as 1.08/hour —
-  quote these effective rates when explaining amounts; the authored values are
-  on the vehicle rows). When `priced` is false, no cost is configured
-  anywhere and `cost.total` is plain travel distance in yards/metres — quote
-  `note` instead of presenting it as money. A rate listed in a vehicle's
+- `costModel` is the pricing the solve ACTUALLY used: each rate is the
+  authored value at the engine's fixed-point step (1e-6 per wire unit — per
+  yard/metre, per second), reported to 2 decimals, so it normally equals the
+  authored rate; quote these effective rates when explaining amounts (the
+  authored values are on the vehicle rows). When `priced` is false, no cost
+  is configured anywhere and the defaults of 1 per mile/km plus 1 per hour
+  apply, so `cost.total` reads roughly as travel distance in miles/km plus
+  total route time in hours (driving + service + waiting) — quote `note`
+  instead of presenting it as money. A rate listed in a vehicle's
   `defaultRates` (and a component's `defaultRate`) is an ENGINE DEFAULT:
   that cost field is blank in the app, so say "default rate", never "you set
   this cost".
@@ -950,12 +955,13 @@ type AddressDiagnostics = {
   `cost.fixed` per vehicle used, `cost.load_distance` per unit of load
   carried per km/mi (every leg charges the load on board times the leg
   length — load-dependent fuel/refrigeration burn; it counts as pricing the
-  fleet like `cost.distance`). An omitted cost field means 0. To simply
-  minimize travel distance, **omit `cost` entirely — do not send zeros**: a
-  fleet whose every distance/duration rate is 0 has nothing to optimize, so
-  the zeros are ignored, plain distance is minimized, and the result carries a
-  `warnings` entry. An explicit 0 next to priced vehicles is honored (a bike
-  with free mileage beside a van at 2/km steers mileage onto the bike).
+  fleet like `cost.distance`). An omitted cost field means 0. To minimize
+  distance and time, **omit `cost` entirely — do not send zeros**: a fleet
+  whose every distance/duration rate is 0 has nothing to optimize, so the
+  zeros are ignored, the defaults of 1 per mile/km plus 1 per hour apply, and
+  the result carries a `warnings` entry. An explicit 0 next to priced
+  vehicles is honored (a bike with free mileage beside a van at 2/km steers
+  mileage onto the bike).
 - **Driver breaks** (per vehicle). `break_rules` (max 1): a driving-trigger
   rule — after `max_driving_s` of accumulated driving the driver needs a
   `duration_s` pause; optional `split_first_s`/`split_second_s` allow taking
@@ -1020,7 +1026,7 @@ type SolveStarted = {
     planUuid: string;
     solveRun: number;  // 1-based counter of solve launches in this session. Each launch is a NEW run even when the request repeats — two identical re-optimizes are two distinct solves, and this field is what makes their results distinct.
     paidFeatures?: PaidFeatureReport;  // Present only when the plan uses paid features outside this account.
-    warnings?: string[];  // Non-blocking notes about how the request was interpreted (e.g. an all-zero cost model replaced by the plain-distance default). Omitted when there is nothing to say.
+    warnings?: string[];  // Non-blocking notes about how the request was interpreted (e.g. an all-zero cost model replaced by the default rates of 1 per mile/km plus 1 per hour). Omitted when there is nothing to say.
     timeLimitS?: number;  // The solver's time budget for this run, in seconds (`options.time_limit_s` or the size-based default). Geocoding and matrix time come on top, so the run lands shortly after this many seconds of solving.
 };
 ```

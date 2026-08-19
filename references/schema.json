@@ -51,7 +51,7 @@
             "items": {
               "type": "string"
             },
-            "description": "Non-blocking notes about how the request was interpreted (e.g. an\nall-zero cost model replaced by the plain-distance default). Omitted\nwhen there is nothing to say."
+            "description": "Non-blocking notes about how the request was interpreted (e.g. an\nall-zero cost model replaced by the default rates of 1 per mile/km\nplus 1 per hour). Omitted when there is nothing to say."
           },
           "timeLimitS": {
             "type": "number",
@@ -356,7 +356,7 @@
           },
           "rate": {
             "type": "number",
-            "description": "Effective per-`unit` rate the solve used (on `routing24_route` costs\nonly) — the authored rate after the engine's fixed-point precision\n(e.g. an authored 1/hour bills as 1.08/hour), so it can differ\nslightly from the vehicle's configured value. See `defaultRate`\nbefore presenting it as configured."
+            "description": "Effective per-`unit` rate the solve used (on `routing24_route` costs\nonly) — the authored rate at the engine's fixed-point step (1e-6 per\nwire unit), rounded to 2 decimals here, so it normally equals the\nvehicle's configured value. See `defaultRate` before presenting it as\nconfigured."
           },
           "quantity": {
             "type": "number",
@@ -448,7 +448,7 @@
           "distanceUnit",
           "vehicles"
         ],
-        "description": "The pricing this solve ACTUALLY used — the vehicles' authored cost rates\nafter the engine's fallbacks. `priced: false` means NO vehicle prices\ndistance, duration or load-distance: the optimizer then minimizes plain\ntravel distance (every vehicle priced at 1 per yard/metre), so `cost.total`\nis literally the plan's travel distance in yards/metres — quote `note` when\nexplaining. Absent on pre-feature solutions."
+        "description": "The pricing this solve ACTUALLY used — the vehicles' authored cost rates\nafter the engine's fallbacks. `priced: false` means NO vehicle prices\ndistance, duration or load-distance: the optimizer then minimizes distance\nand time together (every vehicle priced at the defaults of 1 per mile/km\nplus 1 per hour), so `cost.total` reads roughly as the plan's travel\ndistance in miles/km plus its total route time in hours (driving + service\n+ waiting) — quote `note` when explaining. Absent on pre-feature solutions."
       },
       "VehicleEffectiveRates": {
         "type": "object",
@@ -485,17 +485,20 @@
                   "const": "distance"
                 },
                 {
+                  "const": "duration"
+                },
+                {
                   "const": "overtime"
                 }
               ]
             },
-            "description": "Rates the ENGINE supplied — the vehicle's matching cost field is blank\nin the app: `distance` when the fleet is unpriced (1 per yard/metre =\n1760/mi or 1000/km), `overtime` when overtime is allowed but unpriced\n(priced at the vehicle's hourly rate, else a nominal 1/hour). Call\nthese defaults; never present one as a cost the user configured."
+            "description": "Rates the ENGINE supplied — the vehicle's matching cost field is blank\nin the app: `distance` and `duration` when the fleet is unpriced (the\ndefaults of 1 per mile/km and 1 per hour), `overtime` when overtime is\nallowed but unpriced (priced at the vehicle's hourly rate, else a\nnominal 1/hour). Call these defaults; never present one as a cost the\nuser configured."
           }
         },
         "required": [
           "vehicleId"
         ],
-        "description": "One vehicle type's effective rates, in `CostModel.distanceUnit` and hours:\n`fixed` per route driven, `distance` per mi/km, `duration` / `overtime` /\n`rideOvertime` per hour, `stop` per stop served, `loadDistance` per load\nunit per mi/km. An omitted rate = 0 (not charged). Rates are what the\nengine BILLS — the authored value at the engine's fixed-point precision\n(an authored 1/hour bills as 1.08/hour); the authored values themselves\nare on the vehicle rows (`routing24_list_vehicles`)."
+        "description": "One vehicle type's effective rates, in `CostModel.distanceUnit` and hours:\n`fixed` per route driven, `distance` per mi/km, `duration` / `overtime` /\n`rideOvertime` per hour, `stop` per stop served, `loadDistance` per load\nunit per mi/km. An omitted rate = 0 (not charged). Rates are what the\nengine BILLS — the authored value at the engine's fixed-point step (1e-6\nper wire unit), rounded to 2 decimals here, so a rate normally equals the\nauthored one; the authored values themselves are on the vehicle rows\n(`routing24_list_vehicles`)."
       },
       "RouteBrief": {
         "type": "object",
@@ -1959,7 +1962,7 @@
           }
         },
         "required": [],
-        "description": "Per-vehicle cost rates. An omitted field means 0. Exception: when NO\nvehicle in the fleet has a nonzero `distance`, `duration` or\n`load_distance` rate, the\noptimizer falls back to minimizing plain travel distance (so an\nall-blank fleet still gets sensible routes); setting every cost to an\nexplicit 0 triggers the same fallback plus a warning. An explicit 0 is\nmeaningful in a mixed fleet (e.g. a bike with free mileage next to a\npriced van)."
+        "description": "Per-vehicle cost rates. An omitted field means 0. Exception: when NO\nvehicle in the fleet has a nonzero `distance`, `duration` or\n`load_distance` rate, the optimizer falls back to the default rates of\n1 per km (or mile) plus 1 per hour, minimizing distance and time\ntogether (so an all-blank fleet still gets sensible routes); setting\nevery cost to an explicit 0 triggers the same fallback plus a warning.\nAn explicit 0 is meaningful in a mixed fleet (e.g. a bike with free\nmileage next to a priced van)."
       },
       "VehicleBreakRule": {
         "type": "object",
