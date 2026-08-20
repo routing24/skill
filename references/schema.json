@@ -2937,6 +2937,328 @@
           "exported"
         ],
         "description": "Result of `routing24_export_excel`."
+      },
+      "LoadPlanInput": {
+        "type": "object",
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "description": "The plan's id, as returned by `routing24_list_plans`."
+          }
+        },
+        "required": [
+          "plan_id"
+        ],
+        "description": "Input for `routing24_load_plan`."
+      },
+      "LoadPlanResult": {
+        "type": "object",
+        "properties": {
+          "loaded": {
+            "type": "boolean"
+          },
+          "plan_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "alreadyLoaded": {
+            "type": "boolean",
+            "description": "The plan was already the loaded plan; nothing changed."
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "loaded",
+          "plan_id"
+        ],
+        "description": "Result of `routing24_load_plan`."
+      },
+      "PlanListEntry": {
+        "type": "object",
+        "properties": {
+          "plan_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "number",
+            "description": "Unix epoch milliseconds."
+          },
+          "updatedAt": {
+            "type": "number",
+            "description": "Unix epoch milliseconds."
+          },
+          "entitiesCount": {
+            "type": "object",
+            "properties": {
+              "addresses": {
+                "type": "number"
+              },
+              "vehicles": {
+                "type": "number"
+              },
+              "depots": {
+                "type": "number"
+              },
+              "sites": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "addresses",
+              "vehicles",
+              "depots",
+              "sites"
+            ]
+          },
+          "current": {
+            "type": "boolean",
+            "description": "Set on the plan currently loaded in the app."
+          }
+        },
+        "required": [
+          "plan_id",
+          "name",
+          "createdAt",
+          "updatedAt"
+        ],
+        "description": "One saved plan in the `routing24_list_plans` result."
+      },
+      "ListPlansResult": {
+        "type": "object",
+        "properties": {
+          "plans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanListEntry"
+            }
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "More plans exist beyond this first page of the index."
+          }
+        },
+        "required": [
+          "plans"
+        ],
+        "description": "Result of `routing24_list_plans`."
+      },
+      "SqlQueryInput": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "One or more SQLite statements. Statements that write plan data are\nrejected — use `routing24_sql_update`."
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "description": "Input for `routing24_sql_query`."
+      },
+      "SqlUpdateInput": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "One or more SQLite statements; UPDATEs on the writable columns of\nsites/vehicles/depots journal cell changes that apply atomically."
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "description": "Input for `routing24_sql_update`."
+      },
+      "RunScriptInput": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "JavaScript/TypeScript for the plan sandbox. Mutate `data` entity\nfields; delete via deleteSites/deleteVehicles/deleteDepots(predicate);\nassign a short JSON-serializable summary to `__output`."
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "description": "Input for `routing24_run_script`."
+      },
+      "SqlQueryResult": {
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/SqlCell"
+              }
+            }
+          },
+          "rowCount": {
+            "type": "number",
+            "description": "Rows the statement produced (before the wire cap)."
+          },
+          "matchedRows": {
+            "type": "number"
+          },
+          "noop": {
+            "type": "string",
+            "description": "Set when an UPDATE matched rows but changed nothing."
+          },
+          "truncated": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "columns",
+          "rows",
+          "rowCount"
+        ],
+        "description": "Result of `routing24_sql_query`."
+      },
+      "SqlCell": {
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          }
+        ],
+        "description": "One SQL result cell (bigints arrive as numbers, or strings when unsafe)."
+      },
+      "SqlUpdateResult": {
+        "type": "object",
+        "properties": {
+          "applied": {
+            "type": "boolean"
+          },
+          "changedCells": {
+            "type": "number"
+          },
+          "updatedEntities": {
+            "type": "number"
+          },
+          "matchedRows": {
+            "type": "number"
+          },
+          "noop": {
+            "type": "string",
+            "description": "Set when the statement matched rows but changed nothing."
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CommitErrorRow"
+            },
+            "description": "Validation rejections — nothing was applied."
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fleetDiagnostics": {
+            "$ref": "#/components/schemas/FleetDiagnostics"
+          }
+        },
+        "required": [
+          "applied"
+        ],
+        "description": "Result of `routing24_sql_update`."
+      },
+      "CommitErrorRow": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "message"
+        ],
+        "description": "One entity the commit pipeline rejected."
+      },
+      "RunScriptResult": {
+        "type": "object",
+        "properties": {
+          "applied": {
+            "type": "boolean"
+          },
+          "output": {
+            "type": "string",
+            "description": "The script's `__output`, JSON-serialized (capped)."
+          },
+          "stdout": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "journaledWrites": {
+            "type": "number"
+          },
+          "deletionsMarked": {
+            "type": "number"
+          },
+          "updatedEntities": {
+            "type": "number"
+          },
+          "deletedEntities": {
+            "type": "number"
+          },
+          "cascades": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CommitErrorRow"
+            },
+            "description": "Validation rejections — nothing was applied."
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fleetDiagnostics": {
+            "$ref": "#/components/schemas/FleetDiagnostics"
+          }
+        },
+        "required": [
+          "applied",
+          "journaledWrites"
+        ],
+        "description": "Result of `routing24_run_script`."
       }
     }
   },
@@ -3057,6 +3379,36 @@
     },
     {
       "$ref": "#/components/schemas/ExportExcelResult"
+    },
+    {
+      "$ref": "#/components/schemas/LoadPlanInput"
+    },
+    {
+      "$ref": "#/components/schemas/LoadPlanResult"
+    },
+    {
+      "$ref": "#/components/schemas/PlanListEntry"
+    },
+    {
+      "$ref": "#/components/schemas/ListPlansResult"
+    },
+    {
+      "$ref": "#/components/schemas/SqlQueryInput"
+    },
+    {
+      "$ref": "#/components/schemas/SqlUpdateInput"
+    },
+    {
+      "$ref": "#/components/schemas/RunScriptInput"
+    },
+    {
+      "$ref": "#/components/schemas/SqlQueryResult"
+    },
+    {
+      "$ref": "#/components/schemas/SqlUpdateResult"
+    },
+    {
+      "$ref": "#/components/schemas/RunScriptResult"
     }
   ]
 }

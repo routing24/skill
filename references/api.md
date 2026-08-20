@@ -1085,6 +1085,130 @@ type ShowOnMapResult = {
 };
 ```
 
+### `routing24_list_plans` → `ListPlansResult`
+No input. Refreshes and lists the account's saved plans: `plan_id`, name,
+created/updated timestamps, entity counts, and which plan is currently loaded
+(`current: true`). First page of the plans index only — `truncated: true`
+signals more exist. Modifies nothing.
+```ts
+// Result of `routing24_list_plans`.
+type ListPlansResult = {
+    plans: PlanListEntry[];
+    truncated?: boolean;  // More plans exist beyond this first page of the index.
+};
+```
+```ts
+// One saved plan in the `routing24_list_plans` result.
+type PlanListEntry = {
+    plan_id: string;
+    name: string;
+    createdAt: number;  // Unix epoch milliseconds.
+    updatedAt: number;  // Unix epoch milliseconds.
+    entitiesCount?: { addresses: number; vehicles: number; depots: number; sites: number };
+    current?: boolean;  // Set on the plan currently loaded in the app.
+};
+```
+
+### `routing24_load_plan` — `LoadPlanInput` → `LoadPlanResult`
+Loads a saved plan by `plan_id` (from `routing24_list_plans`), making it the
+loaded plan. Unsaved changes of the plan it replaces are auto-saved first —
+nothing is lost. Refuses while an optimization is running: cancel with
+`routing24_cancel` or wait for it to finish.
+```ts
+// Input for `routing24_load_plan`.
+type LoadPlanInput = {
+    plan_id: string;  // The plan's id, as returned by `routing24_list_plans`.
+};
+```
+```ts
+// Result of `routing24_load_plan`.
+type LoadPlanResult = {
+    loaded: boolean;
+    plan_id: string;
+    name?: string;
+    alreadyLoaded?: boolean;  // The plan was already the loaded plan; nothing changed.
+    error?: string;
+};
+```
+
+### `routing24_sql_query` / `routing24_sql_update` — `SqlQueryInput` → `SqlQueryResult` / `SqlUpdateInput` → `SqlUpdateResult`
+SQLite over the loaded plan's live data: `sites`, `vehicles`, `depots`,
+`addresses`, `site_tags`, `solution_routes`, `solution_stops`, `unassigned`.
+`routing24_sql_query` reads (up to 200 rows; statements that write are
+rejected); `routing24_sql_update` collects UPDATEs on the writable columns of
+sites/vehicles/depots, validates them, and applies atomically — validation
+failures change nothing, and every applied change is one `routing24_undo`
+step. INSERT/DELETE are rejected: create with `routing24_upsert_*`, delete
+with `routing24_delete_*` or by criteria with `routing24_run_script`. The
+runtime tool description carries the full commented per-column schema.
+```ts
+// Input for `routing24_sql_query`.
+type SqlQueryInput = {
+    query: string;  // One or more SQLite statements. Statements that write plan data are rejected — use `routing24_sql_update`.
+};
+```
+```ts
+// Result of `routing24_sql_query`.
+type SqlQueryResult = {
+    columns: string[];
+    rows: ((null | string | number)[])[];
+    rowCount: number;  // Rows the statement produced (before the wire cap).
+    matchedRows?: number;
+    noop?: string;  // Set when an UPDATE matched rows but changed nothing.
+    truncated?: string;
+};
+```
+```ts
+// Input for `routing24_sql_update`.
+type SqlUpdateInput = {
+    query: string;  // One or more SQLite statements; UPDATEs on the writable columns of sites/vehicles/depots journal cell changes that apply atomically.
+};
+```
+```ts
+// Result of `routing24_sql_update`.
+type SqlUpdateResult = {
+    applied: boolean;
+    changedCells?: number;
+    updatedEntities?: number;
+    matchedRows?: number;
+    noop?: string;  // Set when the statement matched rows but changed nothing.
+    errors?: { kind: string; id: string; message: string }[];  // Validation rejections — nothing was applied.
+    warnings?: string[];
+    fleetDiagnostics?: { summary: string; problems: { category: "vehicle_incompatible"; count: number; explanation: string; lever: string }[] };
+};
+```
+
+### `routing24_run_script` — `RunScriptInput` → `RunScriptResult`
+Sandboxed JavaScript/TypeScript against a draft of the loaded plan: mutate
+entity fields in `data`, delete via `deleteSites`/`deleteVehicles`/
+`deleteDepots(predicate)`, assign a JSON-serializable summary to `__output`.
+Journaled writes validate and apply atomically (one `routing24_undo` step); a
+run with no writes returns `__output` only — usable for pure analysis. 20 s
+budget, one run at a time. The runtime tool description carries the sandbox
+globals reference.
+```ts
+// Input for `routing24_run_script`.
+type RunScriptInput = {
+    code: string;  // JavaScript/TypeScript for the plan sandbox. Mutate `data` entity fields; delete via deleteSites/deleteVehicles/deleteDepots(predicate); assign a short JSON-serializable summary to `__output`.
+};
+```
+```ts
+// Result of `routing24_run_script`.
+type RunScriptResult = {
+    applied: boolean;
+    output?: string;  // The script's `__output`, JSON-serialized (capped).
+    stdout?: string[];
+    journaledWrites: number;
+    deletionsMarked?: number;
+    updatedEntities?: number;
+    deletedEntities?: number;
+    cascades?: string[];
+    errors?: { kind: string; id: string; message: string }[];  // Validation rejections — nothing was applied.
+    warnings?: string[];
+    fleetDiagnostics?: { summary: string; problems: { category: "vehicle_incompatible"; count: number; explanation: string; lever: string }[] };
+};
+```
+
 ## Machine-readable JSON Schema
 
 The full JSON Schema is in [schema.json](schema.json) (same directory).
