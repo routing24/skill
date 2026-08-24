@@ -3,6 +3,26 @@
 Version history of the generated `routing24-optimizer` skill content (SKILL.md +
 references/*) and `llms.txt`. Generated; do not edit by hand.
 
+## 8.1.0
+
+The connector guidance now names the page that has to be open: https://routing24.com/app. The MCP endpoint is served from a different host than the app, so an assistant holding only the connector URL had nothing to go on and sent users to the endpoint host, which serves the server and never the app — a tab that can never connect. No tool contract changed.
+
+## 8.0.0
+
+BREAKING — the four `routing24_upsert_*` tools apply PARTIALLY. A row the contract rejects no longer discards the batch: the good rows are written and each bad one comes back in the new `UpsertResult.rejected[]` as { row, id?, error }, where `row` is its 0-based index in the array you sent — the only handle that works when the missing field IS the `id`. Re-send just those rows. `added + updated + skipped` now always equals the number of rows sent; `rejected` is capped at 20 entries with `rejectedOmitted` counting the rest, and `applied: false` means nothing at all was written. Everything that previously threw for one row is covered: a missing `id`, a constraint out of range, a row with no address, a stop whose tag is both required and forbidden, a vehicle naming a depot the plan does not have, and a shape error confined to one row. `unresolvedRefs[]` is GONE — a dropped row is now in `rejected`, while a value dropped from a row that DID land is in the new `warnings[]`. Also breaking: `id` is now REQUIRED in the schema for stop, depot and vehicle rows, which it always was in practice. `routing24_upsert_addresses` still returns per-row `rows` for batches of at most 5, now covering the accepted rows only and carrying each row's input index.
+
+## 7.1.0
+
+`routing24_edit_split_route` no longer refuses a split just because the source route's vehicle type is fully committed. Omit `vehicle` and the tail still reuses that type while it has an instance left; when it does not, an UNUSED vehicle is taken instead and named in the new `EditResult.autoPickedVehicle` (`route`, `vehicle`, `insteadOf`) — the tail then runs a different capacity, shift and cost, so report which vehicle it got. The editing-tool `SessionState` gained `unusedVehicles[]` ({ id, count }): the vehicle types with an instance free for a new route, previously derivable only by counting `routing24_list_vehicles` against `routeStats[].vehicleId`. `vehicle_overused` rejections now name those unused vehicles, and when there are none they correct the engine's "add a vehicle to the plan" advice, which cannot help mid-session.
+
+## 7.0.0
+
+BREAKING — the hosted MCP server is now the primary way in. Add https://routing24.ai/mcp as a custom connector (OAuth 2.1) and the `routing24_*` tools arrive natively, with no page scripting. Two preconditions replace the old browser-agent requirement: the user stays signed in, and a https://routing24.com/app tab stays open, because every call executes inside it. The procedure is now stated as tool calls rather than `javascript_tool` expressions, and the connector guidance (sessions, plan scoping, the drift rejection) is spliced from the same source the server returns from `initialize`, so the two cannot disagree. Driving the page over WebMCP still works and moved to its own section, "Driving the page directly", which now owns the getTools/executeTool wrapper. Corrected: earlier versions claimed there is no server API, no API key, and that every tool works anonymously; all three hold on the WebMCP surface only. Why: the skill taught the one path most assistants cannot take — adding a connector is a setting, scripting a page is a capability.
+
+## 6.2.0
+
+Driver breaks are first-class in every read surface. `OptimizeStatus.routeStats[]`, `routing24_route` and the editing-tool `SessionState.routes[]` now carry `breakCount` / `breakDurationS` per route (absent = no breaks — legitimate when total driving stays under the rule trigger), so "which routes have breaks" is answerable from `routing24_status` alone. The SQL surface gained `solution_routes.break_count` / `break_duration_s` and `solution_stops.service_duration_s` (for break rows, the pause length). Docs now spell out the rest semantics: without `service_counts` the driving clock resets ONLY at scheduled break stops — waiting, service and depot reloads never count as a break, however long.
+
 ## 6.1.0
 
 Unpriced fleets get a real default objective: when no vehicle prices distance, duration or load-distance, the optimizer now bills 1 per mile (or km, per the plan's display unit) PLUS 1 per hour — previously 1 per yard/metre and nothing for time — so `cost.total` reads roughly as miles(km) + hours instead of raw distance in matrix units. `VehicleEffectiveRates.defaultRates` may now contain `duration` (alongside `distance`/`overtime`), and the unpriced `costModel.note` names the new defaults. Rate quantization is finer too: the engine's fixed-point step is now 1e-6 per wire unit, eliminating the old visible 1.08/hour quantization error — an effective rate now matches the authored one at the 2 decimals these surfaces report. Routes for unpriced plans can change — time now steers the optimization, as the product copy always said.

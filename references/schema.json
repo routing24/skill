@@ -20,12 +20,12 @@
             "const": true
           },
           "planUuid": {
-            "type": "string"
+            "type": "string",
+            "description": "The plan the call acted on. EXTERNAL (MCP) surface only — the in-app\nchat drives one loaded plan, so the handler omits it there. A handle in\na result reads to a weak model as a handle to pass back: one echoed it\ninto every following call and spent the turn on unknown-field\nrejections (llm-planuuid-err). No input anywhere takes it."
           }
         },
         "required": [
-          "created",
-          "planUuid"
+          "created"
         ],
         "description": "Result of `routing24_new_plan`: the fresh empty plan is now the loaded one."
       },
@@ -36,7 +36,8 @@
             "const": true
           },
           "planUuid": {
-            "type": "string"
+            "type": "string",
+            "description": "The plan the call acted on. EXTERNAL (MCP) surface only — the in-app\nchat drives one loaded plan, so the handler omits it there. A handle in\na result reads to a weak model as a handle to pass back: one echoed it\ninto every following call and spent the turn on unknown-field\nrejections (llm-planuuid-err). No input anywhere takes it."
           },
           "solveRun": {
             "type": "number",
@@ -60,7 +61,6 @@
         },
         "required": [
           "started",
-          "planUuid",
           "solveRun"
         ],
         "description": "Result of `routing24_reoptimize_plan`: the solve is running, poll for progress."
@@ -151,7 +151,8 @@
             "type": "string"
           },
           "planUuid": {
-            "type": "string"
+            "type": "string",
+            "description": "The plan the call acted on. EXTERNAL (MCP) surface only — the in-app\nchat drives one loaded plan, so the handler omits it there. A handle in\na result reads to a weak model as a handle to pass back: one echoed it\ninto every following call and spent the turn on unknown-field\nrejections (llm-planuuid-err). No input anywhere takes it."
           },
           "complete": {
             "type": "boolean",
@@ -191,6 +192,17 @@
           "dataSync": {
             "$ref": "#/components/schemas/DataSyncStatus",
             "description": "Present ONLY when the plan data (or the distance unit) changed after\nthe last optimization — see {@link DataSyncStatus}."
+          },
+          "rev": {
+            "type": "number",
+            "description": "Plan drift counter: bumps on EVERY recorded plan mutation (yours, the\nuser's, another assistant's). Moved since your last call and\n`lastEditBy` isn't you → re-read before editing. Tab-session-scoped:\ngoing backwards also means re-read."
+          },
+          "lastEditAt": {
+            "type": "number"
+          },
+          "lastEditBy": {
+            "type": "string",
+            "description": "'user', 'chat', or an assistant's client name."
           }
         },
         "required": [
@@ -531,6 +543,14 @@
             "type": "boolean",
             "description": "True when every constraint on this route is satisfied."
           },
+          "breakCount": {
+            "type": "number",
+            "description": "Scheduled driver-break stops on this route (they appear in `stops`\nwith type `break`). Absent = none — legitimate when the route's total\ndriving stays under the rule's trigger."
+          },
+          "breakDurationS": {
+            "type": "number",
+            "description": "Total scheduled break time on this route, seconds. Absent = none."
+          },
           "problemsCount": {
             "type": "number",
             "description": "Constraint-problem markers on this route (0 = feasible); read the\nproblems themselves from `routing24_route`."
@@ -542,7 +562,7 @@
           "stopCount",
           "durationHours"
         ],
-        "description": "One route's compact stats in {@link OptimizeStatus}.`routeStats` — totals\nonly, no stop list. Drill into the ordered stops with `routing24_route(route)`.\nThe shared fields are {@link PlanSolutionRoute}'s, defined once there."
+        "description": "One route's compact stats in {@link OptimizeStatus}.`routeStats` — totals\nonly, no stop list. Drill into the ordered stops with `routing24_route(route)`.\nThe shared fields are {@link PlanSolutionRoute}'s, defined once there —\n`breakCount`/`breakDurationS` included, so \"which routes have driver\nbreaks\" is answerable from `routing24_status` alone."
       },
       "RouteCost": {
         "type": "object",
@@ -675,6 +695,14 @@
               "$ref": "#/components/schemas/PlanSolutionStop"
             },
             "description": "Stops in visit order; bounded by depot stops unless the vehicle's\nstart/finish depot is empty (open-ended)."
+          },
+          "breakCount": {
+            "type": "number",
+            "description": "Scheduled driver-break stops on this route (they appear in `stops`\nwith type `break`). Absent = none — legitimate when the route's total\ndriving stays under the rule's trigger."
+          },
+          "breakDurationS": {
+            "type": "number",
+            "description": "Total scheduled break time on this route, seconds. Absent = none."
           }
         },
         "required": [
@@ -785,7 +813,7 @@
                 "const": "break"
               }
             ],
-            "description": "The depot, a delivery/pickup site, or a scheduled driver break. A\n`break` stop is a solver-planned pause taken AT the previous stop's\nlocation: it has no `id`/`address`, `serviceDurationS` is the pause\nlength, and its travel-leg fields are 0."
+            "description": "The depot, a delivery/pickup site, or a scheduled driver break. A\n`break` stop is a solver-planned pause taken AT the previous stop's\nlocation: it has no `id`/`address`, `serviceDurationS` is the pause\nlength, and its travel-leg fields are 0. These stops are the ONLY\nbreak credit: a `waitDurationS` on an ordinary stop is idle time that\ndoes NOT count toward the driver-break rules (unless the rule sets\n`service_counts`), so never present a wait as a break."
           },
           "id": {
             "type": "string",
@@ -1165,7 +1193,7 @@
           },
           "vehicle": {
             "type": "string",
-            "description": "Vehicle for the new tail route (defaults to the same vehicle type)."
+            "description": "Vehicle for the new tail route. Absent = the source route's own type\nwhile it has an instance left, else an unused one is picked and\nreported in `autoPickedVehicle`."
           }
         },
         "required": [
@@ -1268,6 +1296,10 @@
               "$ref": "#/components/schemas/UserAssignedProblemReport"
             },
             "description": "Problem reports for all currently user-assigned sites (when `applied`)."
+          },
+          "autoPickedVehicle": {
+            "$ref": "#/components/schemas/AutoPickedVehicle",
+            "description": "Present when the tool had to choose a vehicle the input did not name —\nsee {@link AutoPickedVehicle}. Say so in your answer."
           }
         },
         "required": [
@@ -1437,6 +1469,13 @@
             },
             "description": "Every route, fresh — supersedes route numbers from before the mutation."
           },
+          "unusedVehicles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UnusedVehicle"
+            },
+            "description": "Vehicle types with a free instance — the fleet a new route can still be\ngiven. Absent = every instance is bound to a route; another route then\nneeds one freed (`routing24_edit_remove_routes` /\n`routing24_edit_merge_routes`) or a re-optimize with a bigger fleet,\nbecause a vehicle ADDED to the plan now only becomes usable on the next\noptimization."
+          },
           "driftFromOptimized": {
             "$ref": "#/components/schemas/OptimizedDrift",
             "description": "Drift vs the last full optimization — report `degraded`/`severe`."
@@ -1460,7 +1499,7 @@
             "items": {
               "type": "string"
             },
-            "description": "Ordered site ids (depots excluded); empty = empty route."
+            "description": "Ordered site ids (depots and driver breaks excluded — breaks have no\nid; see `breakCount` and `routing24_route` for them)."
           },
           "distance": {
             "type": "number",
@@ -1482,6 +1521,14 @@
           "cost": {
             "$ref": "#/components/schemas/RouteCost",
             "description": "Economic cost of this route (absent on pre-feature solutions)."
+          },
+          "breakCount": {
+            "type": "number",
+            "description": "Scheduled driver-break stops on this route. Absent = none."
+          },
+          "breakDurationS": {
+            "type": "number",
+            "description": "Total scheduled break time on this route, seconds. Absent = none."
           }
         },
         "required": [
@@ -1489,6 +1536,24 @@
           "stops"
         ],
         "description": "One route's summary in a {@link SessionState} (post-edit snapshot)."
+      },
+      "UnusedVehicle": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Vehicle business id."
+          },
+          "count": {
+            "type": "number",
+            "description": "Instances free to take one more route."
+          }
+        },
+        "required": [
+          "id",
+          "count"
+        ],
+        "description": "A vehicle type this session has instances left of. Each route binds one\ninstance for as long as the route exists (EMPTY routes included), so this\nis what a NEW route can be given — the tail of `routing24_edit_split_route`,\n`routing24_edit_create_route`, or the target of\n`routing24_edit_set_route_vehicle`. Shown to the user as \"Unused vehicles\"."
       },
       "UserAssignedProblemReport": {
         "type": "object",
@@ -1519,6 +1584,29 @@
           "introduced"
         ],
         "description": "The problem report behind a user-assigned site's badge (edits.fbs\n`UserAssignedReport`): what placing it costs, split into problems the site\nwould have anywhere (`intrinsic`) vs ones this placement introduced."
+      },
+      "AutoPickedVehicle": {
+        "type": "object",
+        "properties": {
+          "route": {
+            "type": "number",
+            "description": "1-based number of the route the picked vehicle now serves."
+          },
+          "vehicle": {
+            "type": "string",
+            "description": "Vehicle id it was given."
+          },
+          "insteadOf": {
+            "type": "string",
+            "description": "The vehicle it would have used, had that type had an instance left."
+          }
+        },
+        "required": [
+          "route",
+          "vehicle",
+          "insteadOf"
+        ],
+        "description": "A vehicle the tool picked itself. `routing24_edit_split_route` gives the\ntail the source route's own vehicle type by default; when that type has no\ninstance left, an unused one is taken instead rather than failing the split.\nThe tail therefore runs a DIFFERENT vehicle than the head — different\ncapacity, shift and cost — so tell the user which one it got."
       },
       "ReoptimizeRouteInput": {
         "type": "object",
@@ -1774,7 +1862,7 @@
           },
           "id": {
             "type": "string",
-            "description": "Caller-chosen business id — the name every other tool refers to.\nONE row per order: never a dumping ground for leftover words (a\nload like \"pickup 1\" is the `pickup` field, not an id and not a\nsecond stop)."
+            "description": "Caller-chosen business id — the name every other tool refers to,\nand REQUIRED on every upsert row (it is the upsert key). ONE row per\norder: never a dumping ground for leftover words (a load like\n\"pickup 1\" is the `pickup` field, not an id and not a second stop,\nand an id belongs in this field, never inside `address`)."
           },
           "status": {
             "oneOf": [
@@ -1788,7 +1876,9 @@
             "description": "Whether the row's address resolved to a map location. Reported on\n`routing24_list_stops` rows; accepted and ignored on upsert (so a\nlisted row writes back unchanged)."
           }
         },
-        "required": [],
+        "required": [
+          "id"
+        ],
         "description": "A delivery/pickup stop: a place plus solver site constraints.\n\nThe intersection above is flattened in the generated schema, which drops the\ndoc comments of the types it merges — and the schema is all a tool caller\nsees, so the conventions those types state are repeated here:\nthe location is the `address` string, geocoded internally; `id` is the\nbusiness id the caller chooses and every other tool refers to (there is no\nname field); loads go in `delivery` (loaded at the depot, dropped here) and\n`pickup` (taken on here, carried back to the depot); every `*_s` time field\nis in seconds — `tw_early_s`/`tw_late_s`/`release_time_s` counted from\nmidnight, `service_duration_s` a duration."
       },
       "ListVehiclesResult": {
@@ -1919,7 +2009,9 @@
             "type": "string"
           }
         },
-        "required": [],
+        "required": [
+          "id"
+        ],
         "description": "A vehicle row: the upsert shape plus the resolved depot business ids."
       },
       "solver.VehicleCost": {
@@ -2082,7 +2174,9 @@
             ]
           }
         },
-        "required": [],
+        "required": [
+          "id"
+        ],
         "description": "A depot row: a place plus depot constraints (open window, handling).\nSame conventions as {@link StopRow}: an `address` geocoded internally, a\ncaller-chosen `id`, `tw_early_s`/`tw_late_s` in seconds since midnight and\n`service_duration_s` in seconds. `status` is reported on\n`routing24_list_depots` rows; accepted and ignored on upsert."
       },
       "ListAddressesResult": {
@@ -2240,7 +2334,7 @@
           },
           "id": {
             "type": "string",
-            "description": "Caller-chosen business id — the name every other tool refers to.\nONE row per order: never a dumping ground for leftover words (a\nload like \"pickup 1\" is the `pickup` field, not an id and not a\nsecond stop)."
+            "description": "Caller-chosen business id — the name every other tool refers to,\nand REQUIRED on every upsert row (it is the upsert key). ONE row per\norder: never a dumping ground for leftover words (a load like\n\"pickup 1\" is the `pickup` field, not an id and not a second stop,\nand an id belongs in this field, never inside `address`)."
           },
           "status": {
             "oneOf": [
@@ -2284,7 +2378,9 @@
             ]
           }
         },
-        "required": [],
+        "required": [
+          "id"
+        ],
         "description": "{@link StopRow} with clearable bounds (see above)."
       },
       "UpsertDepotsInput": {
@@ -2355,7 +2451,9 @@
             ]
           }
         },
-        "required": [],
+        "required": [
+          "id"
+        ],
         "description": "{@link DepotRow} with clearable bounds (see above)."
       },
       "UpsertVehiclesInput": {
@@ -2504,7 +2602,9 @@
             ]
           }
         },
-        "required": [],
+        "required": [
+          "id"
+        ],
         "description": "{@link VehicleRow} with clearable bounds (see above)."
       },
       "UpsertAddressesInput": {
@@ -2554,10 +2654,12 @@
         "type": "object",
         "properties": {
           "applied": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "False ONLY when nothing was written. A batch where some rows were\nrejected and the rest landed is `true` — read `rejected` for what did\nnot."
           },
           "error": {
-            "type": "string"
+            "type": "string",
+            "description": "Why nothing was written; set only when `applied` is false."
           },
           "added": {
             "type": "number"
@@ -2567,14 +2669,25 @@
           },
           "skipped": {
             "type": "number",
-            "description": "Rows dropped (e.g. malformed beyond repair)."
+            "description": "Rows that were NOT written. `added + updated + skipped` always equals\nthe number of rows you sent."
           },
-          "unresolvedRefs": {
+          "rejected": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UpsertRejection"
+            },
+            "description": "The skipped rows with the reason each. Capped — see `rejectedOmitted`."
+          },
+          "rejectedOmitted": {
+            "type": "number",
+            "description": "How many skipped rows `rejected` could not carry because of that cap —\nso `rejected` is a SAMPLE and every occurrence needs fixing, not just\nthe listed ones. Absent = `rejected` lists all of them."
+          },
+          "warnings": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "description": "Unresolved cross-references, as human-readable messages."
+            "description": "Values dropped from rows that DID land (an unknown id in a reference\nlist). The row was written without them."
           },
           "geocoded": {
             "type": "number",
@@ -2596,6 +2709,27 @@
           "skipped"
         ],
         "description": "Result of every `routing24_upsert_*` tool."
+      },
+      "UpsertRejection": {
+        "type": "object",
+        "properties": {
+          "row": {
+            "type": "number"
+          },
+          "id": {
+            "type": "string",
+            "description": "The row's `id`, when it had one."
+          },
+          "error": {
+            "type": "string",
+            "description": "What is wrong and what to send instead."
+          }
+        },
+        "required": [
+          "row",
+          "error"
+        ],
+        "description": "One input row an upsert did not write. `row` is its 0-based index in the\narray that was sent — the only handle that works for a row whose `id` is\nmissing or unusable, which is exactly when this is reported."
       },
       "AddressDiagnostics": {
         "type": "object",
@@ -2694,10 +2828,12 @@
         "type": "object",
         "properties": {
           "applied": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "False ONLY when nothing was written. A batch where some rows were\nrejected and the rest landed is `true` — read `rejected` for what did\nnot."
           },
           "error": {
-            "type": "string"
+            "type": "string",
+            "description": "Why nothing was written; set only when `applied` is false."
           },
           "added": {
             "type": "number"
@@ -2707,14 +2843,25 @@
           },
           "skipped": {
             "type": "number",
-            "description": "Rows dropped (e.g. malformed beyond repair)."
+            "description": "Rows that were NOT written. `added + updated + skipped` always equals\nthe number of rows you sent."
           },
-          "unresolvedRefs": {
+          "rejected": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UpsertRejection"
+            },
+            "description": "The skipped rows with the reason each. Capped — see `rejectedOmitted`."
+          },
+          "rejectedOmitted": {
+            "type": "number",
+            "description": "How many skipped rows `rejected` could not carry because of that cap —\nso `rejected` is a SAMPLE and every occurrence needs fixing, not just\nthe listed ones. Absent = `rejected` lists all of them."
+          },
+          "warnings": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "description": "Unresolved cross-references, as human-readable messages."
+            "description": "Values dropped from rows that DID land (an unknown id in a reference\nlist). The row was written without them."
           },
           "geocoded": {
             "type": "number",
@@ -2736,6 +2883,10 @@
                 "address": {
                   "type": "string",
                   "description": "The `address` as sent (the row's identity, with `area`)."
+                },
+                "row": {
+                  "type": "number",
+                  "description": "0-based index of this row in the `addresses` array that was sent."
                 },
                 "area": {
                   "type": "string"
@@ -2768,7 +2919,7 @@
           "updated",
           "skipped"
         ],
-        "description": "Result of `routing24_upsert_addresses`: the shared upsert counts plus, for\nSMALL batches only (at most 5 rows — the confirm-with-the-user use), one\nresult per input row. `matched` is the canonical address the geocoder\nresolved for rows geocoded on this call — state it when confirming a\ndoubtful address with the user; it is transient and never stored. Rows that\nreused an already-located address book entry come back `status: \"geocoded\"`\nwith no `matched`. Larger batches return counts and `addressDiagnostics`\nonly."
+        "description": "Result of `routing24_upsert_addresses`: the shared upsert counts plus, for\nSMALL batches only (at most 5 rows — the confirm-with-the-user use), one\nresult per input row. `matched` is the canonical address the geocoder\nresolved for rows geocoded on this call — state it when confirming a\ndoubtful address with the user; it is transient and never stored. Rows that\nreused an already-located address book entry come back `status: \"geocoded\"`\nwith no `matched`. Larger batches return counts and `addressDiagnostics`\nonly. Rejected rows are NOT in `rows` — they are in `rejected`, under the\nsame input index."
       },
       "DeleteByIdsInput": {
         "type": "object",
@@ -3259,6 +3410,181 @@
           "journaledWrites"
         ],
         "description": "Result of `routing24_run_script`."
+      },
+      "MapImageInput": {
+        "type": "object",
+        "properties": {
+          "stop_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Frame these stop/depot/address business ids; combined with `routes`."
+          },
+          "routes": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Frame these routes (1-based route numbers, as in `routing24_route`)."
+          },
+          "viewport": {
+            "type": "boolean",
+            "description": "Mirror the user's current map view instead of fitting the plan."
+          }
+        },
+        "required": [],
+        "description": "Input for `routing24_map_image`."
+      },
+      "MapImageResult": {
+        "type": "object",
+        "properties": {
+          "mimeType": {
+            "type": "string"
+          },
+          "width": {
+            "type": "number",
+            "description": "Image pixels (Retina: 2 device px per CSS px)."
+          },
+          "height": {
+            "type": "number"
+          },
+          "bytes": {
+            "type": "number"
+          },
+          "fitted": {
+            "oneOf": [
+              {
+                "const": "plan"
+              },
+              {
+                "const": "selection"
+              },
+              {
+                "const": "viewport"
+              }
+            ],
+            "description": "What the frame was fitted to."
+          },
+          "stops": {
+            "type": "number",
+            "description": "Pins/lines rendered."
+          },
+          "routes": {
+            "type": "number"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "mimeType",
+          "width",
+          "height",
+          "bytes",
+          "fitted",
+          "stops",
+          "routes"
+        ],
+        "description": "Result of `routing24_map_image` (the image itself travels as an MCP image\ncontent block next to this JSON)."
+      },
+      "StatusInput": {
+        "type": "object",
+        "properties": {
+          "since_rev": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Change-wait: when set and nothing changed yet, the call holds its reply\n(up to the usual ~15s) until the plan's `rev` exceeds this — cheap\npush-style notification for a watching agent."
+          }
+        },
+        "required": [],
+        "description": "Input for `routing24_status`."
+      },
+      "SessionLogInput": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "description": "The session (lane) to read — ids arrive in the `session` echo of\nresults."
+          }
+        },
+        "required": [
+          "session_id"
+        ],
+        "description": "Input for `routing24_session_log`."
+      },
+      "SessionLogRow": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "number",
+            "description": "Unix epoch milliseconds."
+          },
+          "agent": {
+            "type": "string",
+            "description": "Acting assistant at that moment."
+          },
+          "kind": {
+            "oneOf": [
+              {
+                "const": "started"
+              },
+              {
+                "const": "adopted"
+              },
+              {
+                "const": "rehosted"
+              },
+              {
+                "const": "call"
+              }
+            ],
+            "description": "Lifecycle lines ('started'/'adopted'/'rehosted') or a tool call."
+          },
+          "tool": {
+            "type": "string"
+          },
+          "argsSummary": {
+            "type": "string",
+            "description": "Compact truncated JSON of the call's arguments."
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "rev": {
+            "type": "number",
+            "description": "Plan drift counter after the call."
+          }
+        },
+        "required": [
+          "at",
+          "agent",
+          "kind"
+        ],
+        "description": "One session-log line."
+      },
+      "SessionLogResult": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "plan_id": {
+            "type": "string"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SessionLogRow"
+            }
+          }
+        },
+        "required": [
+          "session_id",
+          "entries"
+        ],
+        "description": "Result of `routing24_session_log`."
       }
     }
   },
@@ -3409,6 +3735,24 @@
     },
     {
       "$ref": "#/components/schemas/RunScriptResult"
+    },
+    {
+      "$ref": "#/components/schemas/MapImageInput"
+    },
+    {
+      "$ref": "#/components/schemas/MapImageResult"
+    },
+    {
+      "$ref": "#/components/schemas/StatusInput"
+    },
+    {
+      "$ref": "#/components/schemas/SessionLogInput"
+    },
+    {
+      "$ref": "#/components/schemas/SessionLogRow"
+    },
+    {
+      "$ref": "#/components/schemas/SessionLogResult"
     }
   ]
 }

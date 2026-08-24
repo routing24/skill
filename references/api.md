@@ -1,23 +1,24 @@
 # Routing24 route optimizer — API reference
 
-> Generated from Routing24's own types (skill version 6.1.0). The
+> Generated from Routing24's own types (skill version 8.1.0). The
 > always-current copy is served at https://routing24.com/llms.txt.
 
-WebMCP tools registered on `document.modelContext` on every
-`https://routing24.com/app/*` page (`navigator.modelContext` is a deprecated
-alias). Discover them with `getTools()`; invoke with
-`executeTool(tool, JSON.stringify(args))` — it resolves to a **JSON string of the
-result object** (parse it) and **rejects** on validation/handler errors.
+The `routing24_*` tools, one section per tool. The shapes are the same
+on either transport: an MCP client calls them directly, and a browser agent
+reaches them on `document.modelContext` (see *Driving the page directly* for
+that wrapper, which parses the result and rejects on error).
 `routing24_reoptimize_plan` is **fire-and-poll**: it returns immediately after starting
 the background WASM solve; observe it with `routing24_status`. Shapes reuse the
 solver's own `Site`/`VehicleType`/`Location` fields and are validated at
-runtime — the JSON Schema is authoritative. Zero-argument tools take `'{}'`.
+runtime — the JSON Schema is authoritative. Zero-argument tools take an empty
+object.
 
 ### `routing24_get_auth_user` → `{ user: string }`
 No input. Returns the signed-in user's email, or `"anonymous"` when nobody is
-logged in. **Informational only** — every tool works anonymously, so never gate
-the flow on this or ask the user to sign in. It only tells you *where* a saved
-plan will live (see `routing24_save`).
+logged in. **Informational only** — it tells you *where* a saved plan will live
+(see `routing24_save`). An MCP client always runs as a signed-in user; a browser
+agent on the page may run anonymously, and every tool works there too, so never
+gate the flow on this.
 
 ### `routing24_new_plan` — `NewPlanInput` → `NewPlanResult`
 Commits a fresh EMPTY plan and makes it the loaded one — the first step when
@@ -40,17 +41,20 @@ type NewPlanInput = {
 // Result of `routing24_new_plan`: the fresh empty plan is now the loaded one.
 type NewPlanResult = {
     created: true;
-    planUuid: string;
+    planUuid?: string;  // The plan the call acted on. EXTERNAL (MCP) surface only — the in-app chat drives one loaded plan, so the handler omits it there. A handle in a result reads to a weak model as a handle to pass back: one echoed it into every following call and spent the turn on unknown-field rejections (llm-planuuid-err). No input anywhere takes it.
 };
 ```
 
-### `routing24_status` → `OptimizeStatus`
-No input. The optimization snapshot AND the solution overview for the
+### `routing24_status` — `StatusInput?` → `OptimizeStatus`
+The optimization snapshot AND the solution overview for the
 currently-loaded plan (whether you just optimized it or opened it via its URL):
 the rollups, economic `cost`/`objective`, `driftFromOptimized`, and
 `routeStats` — one COMPACT entry per route (vehicle, stop count, distance,
 duration, feasibility, cost; **no** stop list). Poll by looping on routing24_status until phase is 'done' or 'error': while a solve runs each call holds its reply up to ~15s (returning early when the solve lands), so call it back-to-back — no sleep between calls is needed.
-`phase` walks `idle → geocoding → matrix → solving → saving → done` (or `error`). Drill into a
+`phase` walks `idle → geocoding → matrix → solving → saving → done` (or `error`). `rev`/`lastEditBy`
+report the last plan change and who made it; the optional `since_rev` input
+holds the reply until the plan changes again — the cheap way to watch a plan
+someone else (the user or another assistant) is editing. Drill into a
 single route's ordered stops with `routing24_route`, and read what's unserved
 with `routing24_unassigned`.
 ```ts
@@ -69,7 +73,7 @@ type OptimizeStatus = {
     problemsCount?: number;  // Total constraint-problem markers across all routes (0 = feasible).
     driftFromOptimized?: OptimizedDrift;  // Drift vs the last full optimization (absent while a solve runs).
     error?: string;
-    planUuid?: string;
+    planUuid?: string;  // The plan the call acted on. EXTERNAL (MCP) surface only — the in-app chat drives one loaded plan, so the handler omits it there. A handle in a result reads to a weak model as a handle to pass back: one echoed it into every following call and spent the turn on unknown-field rejections (llm-planuuid-err). No input anywhere takes it.
     complete?: boolean;  // True when the solve ran to completion (not cancelled part-way).
     cost?: SolutionCost;  // Economic cost (money) of the whole plan. Coverage is `unassignedCount`, never a cost. Absent on pre-feature solutions.
     objective?: SolverObjective;  // Solver comparison scalar — see {@link SolverObjective}; never money.
@@ -79,12 +83,23 @@ type OptimizeStatus = {
     undoDepth?: number;  // Committed edits `routing24_undo` can walk back.
     redoDepth?: number;  // Undone edits `routing24_redo` can re-apply.
     dataSync?: DataSyncStatus;  // Present ONLY when the plan data (or the distance unit) changed after the last optimization — see {@link DataSyncStatus}.
+    rev?: number;  // Plan drift counter: bumps on EVERY recorded plan mutation (yours, the user's, another assistant's). Moved since your last call and `lastEditBy` isn't you → re-read before editing. Tab-session-scoped: going backwards also means re-read.
+    lastEditAt?: number;
+    lastEditBy?: string;  // 'user', 'chat', or an assistant's client name.
+};
+```
+```ts
+// Input for `routing24_status`.
+type StatusInput = {
+    since_rev?: integer;  // Change-wait: when set and nothing changed yet, the call holds its reply (up to the usual ~15s) until the plan's `rev` exceeds this — cheap push-style notification for a watching agent. — >= 0
 };
 ```
 ```ts
 // One route's compact stats in {@link OptimizeStatus}.`routeStats` — totals
 // only, no stop list. Drill into the ordered stops with `routing24_route(route)`.
-// The shared fields are {@link PlanSolutionRoute}'s, defined once there.
+// The shared fields are {@link PlanSolutionRoute}'s, defined once there —
+// `breakCount`/`breakDurationS` included, so "which routes have driver
+// breaks" is answerable from `routing24_status` alone.
 type RouteBrief = {
     cost?: RouteCost;  // Economic cost of this route (absent on pre-feature solutions).
     distance: number;  // Total travel distance of the route, in `distanceUnit`.
@@ -93,6 +108,8 @@ type RouteBrief = {
     stopCount: number;  // Count of site stops served (the depot start/end are excluded).
     durationHours: number;  // Total route duration (travel + service + wait), hours.
     feasible?: boolean;  // True when every constraint on this route is satisfied.
+    breakCount?: number;  // Scheduled driver-break stops on this route (they appear in `stops` with type `break`). Absent = none — legitimate when the route's total driving stays under the rule's trigger.
+    breakDurationS?: number;  // Total scheduled break time on this route, seconds. Absent = none.
     problemsCount?: number;  // Constraint-problem markers on this route (0 = feasible); read the problems themselves from `routing24_route`.
 };
 ```
@@ -285,12 +302,14 @@ type PlanSolutionRoute = {
     problems?: PlanProblem[];  // Route-level constraint problems (also pinned per-stop).
     cost?: RouteCost;  // Economic cost of this route (absent on pre-feature solutions).
     stops: PlanSolutionStop[];  // Stops in visit order; bounded by depot stops unless the vehicle's start/finish depot is empty (open-ended).
+    breakCount?: number;  // Scheduled driver-break stops on this route (they appear in `stops` with type `break`). Absent = none — legitimate when the route's total driving stays under the rule's trigger.
+    breakDurationS?: number;  // Total scheduled break time on this route, seconds. Absent = none.
 };
 ```
 ```ts
 type PlanSolutionStop = {
     seq: number;  // 0-based position within the route (0 = the starting depot).
-    type: "depot" | "site" | "break";  // The depot, a delivery/pickup site, or a scheduled driver break. A `break` stop is a solver-planned pause taken AT the previous stop's location: it has no `id`/`address`, `serviceDurationS` is the pause length, and its travel-leg fields are 0.
+    type: "depot" | "site" | "break";  // The depot, a delivery/pickup site, or a scheduled driver break. A `break` stop is a solver-planned pause taken AT the previous stop's location: it has no `id`/`address`, `serviceDurationS` is the pause length, and its travel-leg fields are 0. These stops are the ONLY break credit: a `waitDurationS` on an ordinary stop is idle time that does NOT count toward the driver-break rules (unless the rule sets `service_counts`), so never present a wait as a break.
     id?: string;  // The site/depot id (the id you passed to optimize, or an auto-assigned one).
     address?: string;  // Matched street address, when known.
     arrivalTimeS: number;  // Arrival time, seconds since midnight (physical driver timeline).
@@ -486,7 +505,7 @@ type EditRemoveRoutesInput = {
 type EditSplitRouteInput = {
     route: integer;  // Route number (1-based) to split. — >= 1
     after: string;  // Stop id that becomes the last stop of the head route.
-    vehicle?: string;  // Vehicle for the new tail route (defaults to the same vehicle type).
+    vehicle?: string;  // Vehicle for the new tail route. Absent = the source route's own type while it has an instance left, else an unused one is picked and reported in `autoPickedVehicle`.
 };
 ```
 ```ts
@@ -511,6 +530,7 @@ type EditResult = {
     rejection?: EditOpStatus;  // Why the batch rolled back (all-or-nothing), when the engine rejected it.
     state?: SessionState;  // Current state — post-apply, or unchanged when the batch was rejected.
     userAssignedReports?: UserAssignedProblemReport[];  // Problem reports for all currently user-assigned sites (when `applied`).
+    autoPickedVehicle?: { route: number; vehicle: string; insteadOf: string };  // Present when the tool had to choose a vehicle the input did not name — see {@link AutoPickedVehicle}. Say so in your answer.
 };
 ```
 ```ts
@@ -547,6 +567,7 @@ type SessionState = {
     userAssigned?: string[];
     userUnassigned?: string[];
     routes?: RouteSummary[];  // Every route, fresh — supersedes route numbers from before the mutation.
+    unusedVehicles?: { id: string; count: number }[];  // Vehicle types with a free instance — the fleet a new route can still be given. Absent = every instance is bound to a route; another route then needs one freed (`routing24_edit_remove_routes` / `routing24_edit_merge_routes`) or a re-optimize with a bigger fleet, because a vehicle ADDED to the plan now only becomes usable on the next optimization.
     driftFromOptimized?: OptimizedDrift;  // Drift vs the last full optimization — report `degraded`/`severe`.
 };
 ```
@@ -555,12 +576,14 @@ type SessionState = {
 type RouteSummary = {
     route: number;  // 1-based route number (fresh — valid for the next edit call).
     vehicleId?: string;
-    stops: string[];  // Ordered site ids (depots excluded); empty = empty route.
+    stops: string[];  // Ordered site ids (depots and driver breaks excluded — breaks have no id; see `breakCount` and `routing24_route` for them).
     distance?: number;  // Total travel distance, in `SessionState.distanceUnit`.
     durationHours?: number;  // Total duration (travel + service + wait), hours.
     feasible?: boolean;
     problems?: PlanProblem[];
     cost?: RouteCost;  // Economic cost of this route (absent on pre-feature solutions).
+    breakCount?: number;  // Scheduled driver-break stops on this route. Absent = none.
+    breakDurationS?: number;  // Total scheduled break time on this route, seconds. Absent = none.
 };
 ```
 ```ts
@@ -710,7 +733,7 @@ type VehicleRow = {
     period_driving_limit_s?: number;  // PRO: Driver breaks & driving limits
     period_driven_s?: number;  // PRO: Driver breaks & driving limits
     no_mix_load_classes?: { classes: string[] }[];  // PRO: Product segregation (load classes)
-    id?: string;
+    id: string;
     force_allow_sites?: string[];  // PRO: Force allow / deny orders — Stop ids this vehicle type may serve even when tags forbid it — a PERMISSION override, not a reservation: other compatible vehicles can still take the stop. Precedence per vehicle: force_deny_sites beats force_allow_sites beats the tag rule. To make a stop exclusive to one vehicle, use tags (required_tags on the stop + that tag on only this vehicle) or force_deny_sites on every other vehicle.
     force_deny_sites?: string[];  // PRO: Force allow / deny orders — Stop ids this vehicle type must never serve (beats force_allow_sites and tags).
     reload_depots?: string[];  // PRO: Reload depots — Depot ids where mid-route reloads may happen (multi-trip). Omitted = single-trip unless `max_reloads` is set (then the home depot is used); pair with `max_reloads` to cap trips.
@@ -738,8 +761,11 @@ the ONLY location carrier: new addresses are geocoded internally, rows are
 reported with `status` (`geocoded`/`ungeocoded`), and no tool takes or
 returns coordinates — a caller holding exact coordinates sends a decimal
 `"lat, lng"` literal AS the address, which resolves to that exact point and
-stays the row's label. A geocode failure does NOT
-reject the batch: the row is saved without a location and
+stays the row's label. A BAD ROW never rejects the batch: the good rows are
+written, each bad one comes back in `rejected` under its 0-based input index
+with the reason (re-send only those), and `added + updated + skipped` always
+equals the number of rows you sent. A geocode failure is not a bad row at all:
+the row is saved without a location and
 `addressDiagnostics` reports the problems (counts and next steps; a plan
 cannot optimize while a stop or depot uses an unlocated address). These never
 create a plan and never delete anything; the changes affect the NEXT solve
@@ -749,7 +775,7 @@ create a plan and never delete anything; the changes affect the NEXT solve
 ```ts
 // Input for `routing24_upsert_stops`.
 type UpsertStopsInput = {
-    stops: ({ pickup?: number; delivery?: number; service_duration_s?: number; priority?: number; required_tags?: string[]; forbidden_tags?: string[]; group?: string; transfer_type?: "pickup" | "delivery" | "depot"; transfer_id?: string; no_break?: boolean; load_class?: string; sequence_group?: string; sequence_rank?: number; address?: string; area?: string; max_time_in_vehicle_s?: integer; max_ride_overtime_s?: integer; id?: string; status?: "geocoded" | "ungeocoded"; tw_early_s?: null | number; tw_late_s?: null | number; release_time_s?: null | number })[];  // min 1
+    stops: ({ pickup?: number; delivery?: number; service_duration_s?: number; priority?: number; required_tags?: string[]; forbidden_tags?: string[]; group?: string; transfer_type?: "pickup" | "delivery" | "depot"; transfer_id?: string; no_break?: boolean; load_class?: string; sequence_group?: string; sequence_rank?: number; address?: string; area?: string; max_time_in_vehicle_s?: integer; max_ride_overtime_s?: integer; id: string; status?: "geocoded" | "ungeocoded"; tw_early_s?: null | number; tw_late_s?: null | number; release_time_s?: null | number })[];  // min 1
 };
 ```
 ```ts
@@ -762,7 +788,7 @@ type UpsertVehiclesInput = {
 ```ts
 // Input for `routing24_upsert_depots`.
 type UpsertDepotsInput = {
-    depots: ({ service_duration_s?: number; no_break?: boolean; address?: string; area?: string; id?: string; status?: "geocoded" | "ungeocoded"; tw_early_s?: null | number; tw_late_s?: null | number })[];  // min 1
+    depots: ({ service_duration_s?: number; no_break?: boolean; address?: string; area?: string; id: string; status?: "geocoded" | "ungeocoded"; tw_early_s?: null | number; tw_late_s?: null | number })[];  // min 1
 };
 ```
 ```ts
@@ -804,7 +830,7 @@ type StopRow = {
     sequence_rank?: number;  // PRO: Order sequences
     max_time_in_vehicle_s?: integer;  // PRO: Max time in vehicle (shelf life) — >= 0
     max_ride_overtime_s?: integer;  // PRO: Max time in vehicle (shelf life) — >= 0
-    id?: string;  // Caller-chosen business id — the name every other tool refers to. ONE row per order: never a dumping ground for leftover words (a load like "pickup 1" is the `pickup` field, not an id and not a second stop).
+    id: string;  // Caller-chosen business id — the name every other tool refers to, and REQUIRED on every upsert row (it is the upsert key). ONE row per order: never a dumping ground for leftover words (a load like "pickup 1" is the `pickup` field, not an id and not a second stop, and an id belongs in this field, never inside `address`).
     status?: "geocoded" | "ungeocoded";  // Whether the row's address resolved to a map location. Reported on `routing24_list_stops` rows; accepted and ignored on upsert (so a listed row writes back unchanged).
 };
 ```
@@ -821,7 +847,7 @@ type DepotRow = {
     tw_early_s?: number;  // Opens at, seconds since midnight. Absent = open from any time.
     tw_late_s?: number;  // Closes at, seconds since midnight. Absent = open-ended: the depot never closes and the return-by-close constraint is fully lifted.
     no_break?: boolean;
-    id?: string;
+    id: string;
     status?: "geocoded" | "ungeocoded";
 };
 ```
@@ -839,15 +865,27 @@ type AddressUpsert = {
 ```ts
 // Result of every `routing24_upsert_*` tool.
 type UpsertResult = {
-    applied: boolean;
-    error?: string;
+    applied: boolean;  // False ONLY when nothing was written. A batch where some rows were rejected and the rest landed is `true` — read `rejected` for what did not.
+    error?: string;  // Why nothing was written; set only when `applied` is false.
     added: number;
     updated: number;
-    skipped: number;  // Rows dropped (e.g. malformed beyond repair).
-    unresolvedRefs?: string[];  // Unresolved cross-references, as human-readable messages.
+    skipped: number;  // Rows that were NOT written. `added + updated + skipped` always equals the number of rows you sent.
+    rejected?: UpsertRejection[];  // The skipped rows with the reason each. Capped — see `rejectedOmitted`.
+    rejectedOmitted?: number;  // How many skipped rows `rejected` could not carry because of that cap — so `rejected` is a SAMPLE and every occurrence needs fixing, not just the listed ones. Absent = `rejected` lists all of them.
+    warnings?: string[];  // Values dropped from rows that DID land (an unknown id in a reference list). The row was written without them.
     geocoded?: number;  // How many entities were geocoded from their address on the way in (rows whose address could not be geocoded are still saved — see `addressDiagnostics`).
     addressDiagnostics?: AddressDiagnostics;  // Present only when the batch left address problems behind.
     fleetDiagnostics?: { summary: string; problems: { category: "vehicle_incompatible"; count: number; explanation: string; lever: string }[] };  // Present only when the edit left stops no vehicle can serve.
+};
+```
+```ts
+// One input row an upsert did not write. `row` is its 0-based index in the
+// array that was sent — the only handle that works for a row whose `id` is
+// missing or unusable, which is exactly when this is reported.
+type UpsertRejection = {
+    row: number;
+    id?: string;  // The row's `id`, when it had one.
+    error: string;  // What is wrong and what to send instead.
 };
 ```
 ```ts
@@ -858,18 +896,21 @@ type UpsertResult = {
 // doubtful address with the user; it is transient and never stored. Rows that
 // reused an already-located address book entry come back `status: "geocoded"`
 // with no `matched`. Larger batches return counts and `addressDiagnostics`
-// only.
+// only. Rejected rows are NOT in `rows` — they are in `rejected`, under the
+// same input index.
 type UpsertAddressesResult = {
-    applied: boolean;
-    error?: string;
+    applied: boolean;  // False ONLY when nothing was written. A batch where some rows were rejected and the rest landed is `true` — read `rejected` for what did not.
+    error?: string;  // Why nothing was written; set only when `applied` is false.
     added: number;
     updated: number;
-    skipped: number;  // Rows dropped (e.g. malformed beyond repair).
-    unresolvedRefs?: string[];  // Unresolved cross-references, as human-readable messages.
+    skipped: number;  // Rows that were NOT written. `added + updated + skipped` always equals the number of rows you sent.
+    rejected?: UpsertRejection[];  // The skipped rows with the reason each. Capped — see `rejectedOmitted`.
+    rejectedOmitted?: number;  // How many skipped rows `rejected` could not carry because of that cap — so `rejected` is a SAMPLE and every occurrence needs fixing, not just the listed ones. Absent = `rejected` lists all of them.
+    warnings?: string[];  // Values dropped from rows that DID land (an unknown id in a reference list). The row was written without them.
     geocoded?: number;  // How many entities were geocoded from their address on the way in (rows whose address could not be geocoded are still saved — see `addressDiagnostics`).
     addressDiagnostics?: AddressDiagnostics;  // Present only when the batch left address problems behind.
     fleetDiagnostics?: { summary: string; problems: { category: "vehicle_incompatible"; count: number; explanation: string; lever: string }[] };  // Present only when the edit left stops no vehicle can serve.
-    rows?: ({ address: string; area?: string; status: "geocoded" | "ungeocoded"; matched?: string })[];
+    rows?: ({ address: string; row?: number; area?: string; status: "geocoded" | "ungeocoded"; matched?: string })[];
 };
 ```
 ```ts
@@ -884,8 +925,14 @@ type AddressDiagnostics = {
 };
 ```
 - `id` is required on every stop/depot/vehicle here (it is the upsert key).
+- `rejected` is capped at 20 entries; `skipped` is always the exact count and
+  `rejectedOmitted` says how many the cap hid, so a truncated list never reads
+  as the whole story — fix every occurrence, not only the listed ones.
+- `warnings` is different from `rejected`: the row DID land, only an
+  unresolvable id inside a reference list was dropped from it.
 - `routing24_upsert_addresses` with **at most 5 rows** returns `rows` — one
-  per input with `status` and the canonical `matched` text the geocoder
+  per ACCEPTED input row with its input index, `status` and the canonical
+  `matched` text the geocoder
   resolved (present only for rows geocoded by this call) — the way to confirm
   a doubtful address with the user before creating stops on it. Larger
   batches (hundreds of rows are fine) return counts and
@@ -893,10 +940,12 @@ type AddressDiagnostics = {
 - A row whose `address`+`area` pair the plan already resolved reuses that
   stored location — re-sending known addresses never re-geocodes or moves
   them; only NEW or changed address text is geocoded.
-- A vehicle's `start_depot_id`/`end_depot_id` take depot business ids; omit
-  them only when the plan has exactly one depot. Vehicles whose depot reference
-  resolves to nothing are skipped and reported in `unresolvedRefs` — never
-  silently mis-assigned.
+- A vehicle's `start_depot_id`/`end_depot_id` take depot business ids. Omit
+  them when the plan has exactly one depot (it is used), or to leave the route
+  **open-ended**: a depot is OPTIONAL, and a vehicle without one starts at its
+  first order. A plan with no depot at all still optimizes. A depot reference
+  that names no depot in the plan is a different case — that row is rejected,
+  never silently mis-assigned.
 - `area` is accepted on stops and depots (and returned by the list tools), so a
   row read out can be written straight back.
 - Times are **seconds since midnight**. `delivery`/`pickup` are
@@ -1023,7 +1072,7 @@ type ReoptimizePlanInput = {
 // Result of `routing24_reoptimize_plan`: the solve is running, poll for progress.
 type SolveStarted = {
     started: true;
-    planUuid: string;
+    planUuid?: string;  // The plan the call acted on. EXTERNAL (MCP) surface only — the in-app chat drives one loaded plan, so the handler omits it there. A handle in a result reads to a weak model as a handle to pass back: one echoed it into every following call and spent the turn on unknown-field rejections (llm-planuuid-err). No input anywhere takes it.
     solveRun: number;  // 1-based counter of solve launches in this session. Each launch is a NEW run even when the request repeats — two identical re-optimizes are two distinct solves, and this field is what makes their results distinct.
     paidFeatures?: PaidFeatureReport;  // Present only when the plan uses paid features outside this account.
     warnings?: string[];  // Non-blocking notes about how the request was interpreted (e.g. an all-zero cost model replaced by the default rates of 1 per mile/km plus 1 per hour). Omitted when there is nothing to say.
@@ -1206,6 +1255,73 @@ type RunScriptResult = {
     errors?: { kind: string; id: string; message: string }[];  // Validation rejections — nothing was applied.
     warnings?: string[];
     fleetDiagnostics?: { summary: string; problems: { category: "vehicle_incompatible"; count: number; explanation: string; lever: string }[] };
+};
+```
+
+### `routing24_map_image` — `MapImageInput` → image + `MapImageResult`
+Snapshot the plan as a Retina map image: depot/stop pins and colored route
+lines rendered on an offscreen basemap — the user's on-screen map is untouched.
+Default frames the whole plan; `stop_ids` and/or `routes` (1-based route
+numbers) frame that subset with everything still visible; `viewport: true`
+mirrors what the user is looking at. Over MCP the image arrives as an image
+content block (WebP/JPEG, ≤ 600 KB) next to the JSON meta; the WebMCP surface
+returns the meta only — screenshot the tab there instead. Takes a few seconds
+and needs the app tab out of background (browsers pause map rendering in hidden
+windows). Modifies nothing.
+```ts
+// Input for `routing24_map_image`.
+type MapImageInput = {
+    stop_ids?: string[];  // Frame these stop/depot/address business ids; combined with `routes`.
+    routes?: integer[];  // Frame these routes (1-based route numbers, as in `routing24_route`).
+    viewport?: boolean;  // Mirror the user's current map view instead of fitting the plan.
+};
+```
+```ts
+// Result of `routing24_map_image` (the image itself travels as an MCP image
+// content block next to this JSON).
+type MapImageResult = {
+    mimeType: string;
+    width: number;  // Image pixels (Retina: 2 device px per CSS px).
+    height: number;
+    bytes: number;
+    fitted: "plan" | "selection" | "viewport";  // What the frame was fitted to.
+    stops: number;  // Pins/lines rendered.
+    routes: number;
+    note?: string;
+};
+```
+
+### `routing24_session_log` — `SessionLogInput` → `SessionLogResult`
+An agent session's persisted action log: lifecycle lines
+(started/adopted/rehosted) and every tool call with a compact args summary,
+outcome, and the plan `rev` after it. Your first mutating call starts a
+session (its id arrives in the result's `session` echo — pin it as
+`session_id` on later calls); pinning ANOTHER agent's session id adopts that
+lane, so read its log first to continue coherently. Modifies nothing.
+```ts
+// Input for `routing24_session_log`.
+type SessionLogInput = {
+    session_id: string;  // The session (lane) to read — ids arrive in the `session` echo of results.
+};
+```
+```ts
+// Result of `routing24_session_log`.
+type SessionLogResult = {
+    session_id: string;
+    plan_id?: string;
+    entries: SessionLogRow[];
+};
+```
+```ts
+// One session-log line.
+type SessionLogRow = {
+    at: number;  // Unix epoch milliseconds.
+    agent: string;  // Acting assistant at that moment.
+    kind: "started" | "adopted" | "rehosted" | "call";  // Lifecycle lines ('started'/'adopted'/'rehosted') or a tool call.
+    tool?: string;
+    argsSummary?: string;  // Compact truncated JSON of the call's arguments.
+    ok?: boolean;
+    rev?: number;  // Plan drift counter after the call.
 };
 ```
 
