@@ -3414,20 +3414,13 @@
       "MapImageInput": {
         "type": "object",
         "properties": {
-          "stop_ids": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Frame these stop/depot/address business ids; combined with `routes`."
-          },
           "routes": {
             "type": "array",
             "items": {
               "type": "integer",
               "minimum": 1
             },
-            "description": "Frame these routes (1-based route numbers, as in `routing24_route`)."
+            "description": "Draw only these routes (1-based route numbers, as in `routing24_route`)\nand fit the frame to them. Everything else — the other routes, their\nstops, unassigned pins — is left out, so one route can be read on its\nown. Default: the whole plan."
           },
           "viewport": {
             "type": "boolean",

@@ -1259,20 +1259,19 @@ type RunScriptResult = {
 ```
 
 ### `routing24_map_image` — `MapImageInput` → image + `MapImageResult`
-Snapshot the plan as a Retina map image: depot/stop pins and colored route
+Snapshot the plan as a map image: depot/stop pins and colored route
 lines rendered on an offscreen basemap — the user's on-screen map is untouched.
-Default frames the whole plan; `stop_ids` and/or `routes` (1-based route
-numbers) frame that subset with everything still visible; `viewport: true`
-mirrors what the user is looking at. Over MCP the image arrives as an image
-content block (WebP/JPEG, ≤ 600 KB) next to the JSON meta; the WebMCP surface
-returns the meta only — screenshot the tab there instead. Takes a few seconds
-and needs the app tab out of background (browsers pause map rendering in hidden
-windows). Modifies nothing.
+Default draws the whole plan. `routes` (1-based route numbers) draws ONLY
+those routes and fits the frame to them, leaving every other route and pin out:
+that is how to look at one route on a plan too busy to read. `viewport: true`
+mirrors what the user is looking at instead. Over MCP the image arrives as an
+image content block (WebP/JPEG, ≤ 600 KB) next to the JSON meta; the WebMCP
+surface returns the meta only — screenshot the tab there instead. Takes a few
+seconds. Modifies nothing.
 ```ts
 // Input for `routing24_map_image`.
 type MapImageInput = {
-    stop_ids?: string[];  // Frame these stop/depot/address business ids; combined with `routes`.
-    routes?: integer[];  // Frame these routes (1-based route numbers, as in `routing24_route`).
+    routes?: integer[];  // Draw only these routes (1-based route numbers, as in `routing24_route`) and fit the frame to them. Everything else — the other routes, their stops, unassigned pins — is left out, so one route can be read on its own. Default: the whole plan.
     viewport?: boolean;  // Mirror the user's current map view instead of fitting the plan.
 };
 ```
