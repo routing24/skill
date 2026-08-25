@@ -1,6 +1,6 @@
 # Routing24 route optimizer — API reference
 
-> Generated from Routing24's own types (skill version 8.1.0). The
+> Generated from Routing24's own types (skill version 8.2.0). The
 > always-current copy is served at https://routing24.com/llms.txt.
 
 The `routing24_*` tools, one section per tool. The shapes are the same
@@ -339,7 +339,7 @@ type RouteCost = {
 ```ts
 // One constraint problem (common.fbs `Problem`).
 type PlanProblem = {
-    type: "capacity" | "max_distance" | "vehicle_incompatible" | "unreachable" | "time_window" | "max_duration" | "depot_time_window" | "shift_window" | "precedence" | "driving_allowance" | "break_schedule" | "break_location" | "sequence" | "incompatible_load_class" | "shelf_life" | "field_not_applicable";
+    type: "max_distance" | "capacity" | "vehicle_incompatible" | "unreachable" | "time_window" | "max_duration" | "depot_time_window" | "shift_window" | "precedence" | "driving_allowance" | "break_schedule" | "break_location" | "sequence" | "incompatible_load_class" | "shelf_life" | "field_not_applicable";
     amount?: number;  // How far over the constraint (see {@link PlanProblemType} for units).
     dimension?: number;  // Capacity dimension index (`capacity` problems only).
     classes?: string[];  // Conflicting load-class names (`incompatible_load_class` only).
@@ -719,7 +719,6 @@ type ListAddressesResult = {
 type VehicleRow = {
     tw_early_s?: number;  // Shift starts, seconds since midnight. Absent = no earliest start.
     tw_late_s?: number;  // Shift ends, seconds since midnight. Absent = open-ended: no shift-end limit at all, the strongest relaxation of the shift.
-    capacity?: number;
     available_count?: number;
     cost?: { fixed?: number; distance?: number; duration?: number; stop?: number; overtime?: number; ride_overtime?: number; load_distance?: number };  // PRO: Load-distance cost (cost per load-km) (cost.load_distance), Max time in vehicle (shelf life) (cost.ride_overtime), Overtime cost per hour (cost.overtime)
     start_late_s?: number;  // Latest time the vehicle may start its shift (leave the depot), distinct from tw_late_s (latest shift end). Absent = defaults to tw_late_s solver-side.
@@ -733,6 +732,7 @@ type VehicleRow = {
     period_driving_limit_s?: number;  // PRO: Driver breaks & driving limits
     period_driven_s?: number;  // PRO: Driver breaks & driving limits
     no_mix_load_classes?: { classes: string[] }[];  // PRO: Product segregation (load classes)
+    capacity?: number | { unit: string; value: number }[];  // What one vehicle of this type carries, in the same units as the stops' loads: a bare number, or an array of per-unit entries (`[{"unit": "pallets", "value": 10}, {"unit": "kg", "value": 800}]`) once the plan names units. Absent = unlimited.
     id: string;
     force_allow_sites?: string[];  // PRO: Force allow / deny orders — Stop ids this vehicle type may serve even when tags forbid it — a PERMISSION override, not a reservation: other compatible vehicles can still take the stop. Precedence per vehicle: force_deny_sites beats force_allow_sites beats the tag rule. To make a stop exclusive to one vehicle, use tags (required_tags on the stop + that tag on only this vehicle) or force_deny_sites on every other vehicle.
     force_deny_sites?: string[];  // PRO: Force allow / deny orders — Stop ids this vehicle type must never serve (beats force_allow_sites and tags).
@@ -775,7 +775,7 @@ create a plan and never delete anything; the changes affect the NEXT solve
 ```ts
 // Input for `routing24_upsert_stops`.
 type UpsertStopsInput = {
-    stops: ({ pickup?: number; delivery?: number; service_duration_s?: number; priority?: number; required_tags?: string[]; forbidden_tags?: string[]; group?: string; transfer_type?: "pickup" | "delivery" | "depot"; transfer_id?: string; no_break?: boolean; load_class?: string; sequence_group?: string; sequence_rank?: number; address?: string; area?: string; max_time_in_vehicle_s?: integer; max_ride_overtime_s?: integer; id: string; status?: "geocoded" | "ungeocoded"; tw_early_s?: null | number; tw_late_s?: null | number; release_time_s?: null | number })[];  // min 1
+    stops: ({ service_duration_s?: number; priority?: number; required_tags?: string[]; forbidden_tags?: string[]; group?: string; transfer_type?: "delivery" | "pickup" | "depot"; transfer_id?: string; no_break?: boolean; load_class?: string; sequence_group?: string; sequence_rank?: number; address?: string; area?: string; delivery?: number | { unit: string; value: number }[]; pickup?: number | { unit: string; value: number }[]; max_time_in_vehicle_s?: integer; max_ride_overtime_s?: integer; id: string; status?: "geocoded" | "ungeocoded"; tw_early_s?: null | number; tw_late_s?: null | number; release_time_s?: null | number })[];  // min 1
 };
 ```
 ```ts
@@ -812,8 +812,6 @@ type UpsertAddressesInput = {
 type StopRow = {
     address?: string;  // The WHOLE place the user named, spelling fixed — every part they wrote (building, tower, unit, street). Order words riding in the same line ("pickup 2", a quantity) are NOT part of the address and never become one: they belong in the load fields.
     area?: string;  // Optional area/city qualifier shown after the address (the address book's `address`+`area` identity). The `routing24_list_*` tools return it on every stop/depot row, so accepting it here is what makes that row writable back through `routing24_upsert_stops`/`_depots` unchanged.
-    pickup?: number;  // Load picked UP at this stop and carried back to the depot, in the same unit as vehicle capacity ("pickup 2" on an order means `pickup: 2` — a load field, never part of the id or address).
-    delivery?: number;  // Load taken from the depot and DELIVERED at this stop, in the same unit as vehicle capacity.
     service_duration_s?: number;
     tw_early_s?: number;  // Window opens, seconds since midnight. Absent = opens with the day.
     tw_late_s?: number;  // Window closes, seconds since midnight. Absent = open-ended (no closing bound on this stop).
@@ -822,12 +820,14 @@ type StopRow = {
     required_tags?: string[];  // PRO: Skills (vehicle & order tags)
     forbidden_tags?: string[];  // PRO: Skills (vehicle & order tags)
     group?: string;  // PRO: Alternative order groups, Alternative pickup/delivery locations
-    transfer_type?: "pickup" | "delivery" | "depot";  // PRO: Pickup & delivery (transfers)
+    transfer_type?: "delivery" | "pickup" | "depot";  // PRO: Pickup & delivery (transfers)
     transfer_id?: string;  // PRO: Pickup & delivery (transfers)
     no_break?: boolean;
     load_class?: string;  // PRO: Product segregation (load classes)
     sequence_group?: string;  // PRO: Order sequences
     sequence_rank?: number;  // PRO: Order sequences
+    delivery?: number | { unit: string; value: number }[];  // Load DELIVERED to this stop (loaded at the depot, dropped here): a bare number, or an array of per-unit entries — `[{"unit": "kg", "value": 300}, {"unit": "pallets", "value": 2}]` — once the plan names units. A unit you omit keeps its current value; value 0 zeroes it.
+    pickup?: number | { unit: string; value: number }[];  // Load PICKED UP at this stop (taken on here, carried back to the depot — or, on a transfer pickup end, to the linked delivery). Same number- or-entries form as `delivery`.
     max_time_in_vehicle_s?: integer;  // PRO: Max time in vehicle (shelf life) — >= 0
     max_ride_overtime_s?: integer;  // PRO: Max time in vehicle (shelf life) — >= 0
     id: string;  // Caller-chosen business id — the name every other tool refers to, and REQUIRED on every upsert row (it is the upsert key). ONE row per order: never a dumping ground for leftover words (a load like "pickup 1" is the `pickup` field, not an id and not a second stop, and an id belongs in this field, never inside `address`).
@@ -876,6 +876,7 @@ type UpsertResult = {
     geocoded?: number;  // How many entities were geocoded from their address on the way in (rows whose address could not be geocoded are still saved — see `addressDiagnostics`).
     addressDiagnostics?: AddressDiagnostics;  // Present only when the batch left address problems behind.
     fleetDiagnostics?: { summary: string; problems: { category: "vehicle_incompatible"; count: number; explanation: string; lever: string }[] };  // Present only when the edit left stops no vehicle can serve.
+    unitsDeclared?: string[];  // Load units this batch DECLARED on the plan (first upsert naming units only), in the plan's unit order.
 };
 ```
 ```ts
@@ -910,6 +911,7 @@ type UpsertAddressesResult = {
     geocoded?: number;  // How many entities were geocoded from their address on the way in (rows whose address could not be geocoded are still saved — see `addressDiagnostics`).
     addressDiagnostics?: AddressDiagnostics;  // Present only when the batch left address problems behind.
     fleetDiagnostics?: { summary: string; problems: { category: "vehicle_incompatible"; count: number; explanation: string; lever: string }[] };  // Present only when the edit left stops no vehicle can serve.
+    unitsDeclared?: string[];  // Load units this batch DECLARED on the plan (first upsert naming units only), in the plan's unit order.
     rows?: ({ address: string; row?: number; area?: string; status: "geocoded" | "ungeocoded"; matched?: string })[];
 };
 ```
@@ -948,9 +950,15 @@ type AddressDiagnostics = {
   never silently mis-assigned.
 - `area` is accepted on stops and depots (and returned by the list tools), so a
   row read out can be written straight back.
-- Times are **seconds since midnight**. `delivery`/`pickup` are
-  single-dimension loads. `available_count` = identical vehicles of that
-  type.
+- Times are **seconds since midnight**. `delivery`/`pickup`/`capacity`
+  take a bare number, or — once the plan names **load units** (up to 4
+  independent axes, e.g. pallets AND kg) — an array of per-unit entries over
+  the DECLARED unit names:
+  `[{"unit": "kg", "value": 300}, {"unit": "pallets", "value": 2}]`. A unit
+  you omit keeps its current value; value 0 zeroes it. New unit names may be
+  introduced only while the plan has none yet; afterwards an unknown name
+  rejects the row (the rejection lists the declared names).
+  `available_count` = identical vehicles of that type.
 - Stops sharing a `group` are mutually exclusive alternatives: the solver
   serves at most one per group and reports the rest as `alternativesNotChosen`.
 - **Alternative pickup/delivery locations**: several stops with the same

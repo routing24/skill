@@ -3,6 +3,10 @@
 Version history of the generated `routing24-optimizer` skill content (SKILL.md +
 references/*) and `llms.txt`. Generated; do not edit by hand.
 
+## 8.2.0
+
+Multi-unit loads. A plan can declare up to 4 named load units (independent capacity axes: pallets AND kg AND seats). `delivery`/`pickup`/`capacity` accept an array of per-unit entries over the declared unit names — {"delivery":[{"unit":"pallets","value":2},{"unit":"kg","value":300}]} — next to the existing bare number, which stays valid while the plan declares at most one unit. The list tools echo the same shape, the `units` SQL table maps unit names to the per-unit SQL columns (pickup_kg, capacity_seats), and `UpsertResult.unitsDeclared` reports units a batch declared. Unit names may be introduced only while the plan has none; after that an unknown name rejects the row.
+
 ## 8.1.0
 
 The connector guidance now names the page that has to be open: https://routing24.com/app. The MCP endpoint is served from a different host than the app, so an assistant holding only the connector URL had nothing to go on and sent users to the endpoint host, which serves the server and never the app — a tab that can never connect. No tool contract changed.

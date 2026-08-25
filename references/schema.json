@@ -744,10 +744,10 @@
       "PlanProblemType": {
         "oneOf": [
           {
-            "const": "capacity"
+            "const": "max_distance"
           },
           {
-            "const": "max_distance"
+            "const": "capacity"
           },
           {
             "const": "vehicle_incompatible"
@@ -1784,14 +1784,6 @@
             "type": "string",
             "description": "Optional area/city qualifier shown after the address (the address book's\n`address`+`area` identity). The `routing24_list_*` tools return it on\nevery stop/depot row, so accepting it here is what makes that row\nwritable back through `routing24_upsert_stops`/`_depots` unchanged."
           },
-          "pickup": {
-            "type": "number",
-            "description": "Load picked UP at this stop and carried back to the depot, in the\nsame unit as vehicle capacity (\"pickup 2\" on an order means\n`pickup: 2` — a load field, never part of the id or address)."
-          },
-          "delivery": {
-            "type": "number",
-            "description": "Load taken from the depot and DELIVERED at this stop, in the same\nunit as vehicle capacity."
-          },
           "service_duration_s": {
             "type": "number"
           },
@@ -1827,10 +1819,10 @@
           "transfer_type": {
             "oneOf": [
               {
-                "const": "pickup"
+                "const": "delivery"
               },
               {
-                "const": "delivery"
+                "const": "pickup"
               },
               {
                 "const": "depot"
@@ -1851,6 +1843,34 @@
           },
           "sequence_rank": {
             "type": "number"
+          },
+          "delivery": {
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/UnitLoad"
+                }
+              }
+            ],
+            "description": "Load DELIVERED to this stop (loaded at the depot, dropped here): a\nbare number, or an array of per-unit entries — `[{\"unit\": \"kg\",\n\"value\": 300}, {\"unit\": \"pallets\", \"value\": 2}]` — once the plan\nnames units. A unit you omit keeps its current value; value 0 zeroes\nit."
+          },
+          "pickup": {
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/UnitLoad"
+                }
+              }
+            ],
+            "description": "Load PICKED UP at this stop (taken on here, carried back to the depot\n— or, on a transfer pickup end, to the linked delivery). Same number-\nor-entries form as `delivery`."
           },
           "max_time_in_vehicle_s": {
             "type": "integer",
@@ -1880,6 +1900,24 @@
           "id"
         ],
         "description": "A delivery/pickup stop: a place plus solver site constraints.\n\nThe intersection above is flattened in the generated schema, which drops the\ndoc comments of the types it merges — and the schema is all a tool caller\nsees, so the conventions those types state are repeated here:\nthe location is the `address` string, geocoded internally; `id` is the\nbusiness id the caller chooses and every other tool refers to (there is no\nname field); loads go in `delivery` (loaded at the depot, dropped here) and\n`pickup` (taken on here, carried back to the depot); every `*_s` time field\nis in seconds — `tw_early_s`/`tw_late_s`/`release_time_s` counted from\nmidnight, `service_duration_s` a duration."
+      },
+      "UnitLoad": {
+        "type": "object",
+        "properties": {
+          "unit": {
+            "type": "string",
+            "description": "A declared load unit's name, VERBATIM as the user wrote it (\"kg\"\nstays \"kg\" — never paraphrased into \"weight\")."
+          },
+          "value": {
+            "type": "number",
+            "description": "The amount on that unit."
+          }
+        },
+        "required": [
+          "unit",
+          "value"
+        ],
+        "description": "One per-unit load amount of a {@link LoadInput} entry array."
       },
       "ListVehiclesResult": {
         "type": "object",
@@ -1919,9 +1957,6 @@
           "tw_late_s": {
             "type": "number",
             "description": "Shift ends, seconds since midnight. Absent = open-ended: no\nshift-end limit at all, the strongest relaxation of the shift."
-          },
-          "capacity": {
-            "type": "number"
           },
           "available_count": {
             "type": "number"
@@ -1976,6 +2011,20 @@
             "items": {
               "$ref": "#/components/schemas/LoadClassGroup"
             }
+          },
+          "capacity": {
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/UnitLoad"
+                }
+              }
+            ],
+            "description": "What one vehicle of this type carries, in the same units as the stops'\nloads: a bare number, or an array of per-unit entries (`[{\"unit\":\n\"pallets\", \"value\": 10}, {\"unit\": \"kg\", \"value\": 800}]`) once the\nplan names units. Absent = unlimited."
           },
           "id": {
             "type": "string"
@@ -2259,14 +2308,6 @@
       "StopPatch": {
         "type": "object",
         "properties": {
-          "pickup": {
-            "type": "number",
-            "description": "Load picked UP at this stop and carried back to the depot, in the\nsame unit as vehicle capacity (\"pickup 2\" on an order means\n`pickup: 2` — a load field, never part of the id or address)."
-          },
-          "delivery": {
-            "type": "number",
-            "description": "Load taken from the depot and DELIVERED at this stop, in the same\nunit as vehicle capacity."
-          },
           "service_duration_s": {
             "type": "number"
           },
@@ -2291,10 +2332,10 @@
           "transfer_type": {
             "oneOf": [
               {
-                "const": "pickup"
+                "const": "delivery"
               },
               {
-                "const": "delivery"
+                "const": "pickup"
               },
               {
                 "const": "depot"
@@ -2323,6 +2364,34 @@
           "area": {
             "type": "string",
             "description": "Optional area/city qualifier shown after the address (the address book's\n`address`+`area` identity). The `routing24_list_*` tools return it on\nevery stop/depot row, so accepting it here is what makes that row\nwritable back through `routing24_upsert_stops`/`_depots` unchanged."
+          },
+          "delivery": {
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/UnitLoad"
+                }
+              }
+            ],
+            "description": "Load DELIVERED to this stop (loaded at the depot, dropped here): a\nbare number, or an array of per-unit entries — `[{\"unit\": \"kg\",\n\"value\": 300}, {\"unit\": \"pallets\", \"value\": 2}]` — once the plan\nnames units. A unit you omit keeps its current value; value 0 zeroes\nit."
+          },
+          "pickup": {
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/UnitLoad"
+                }
+              }
+            ],
+            "description": "Load PICKED UP at this stop (taken on here, carried back to the depot\n— or, on a transfer pickup end, to the linked delivery). Same number-\nor-entries form as `delivery`."
           },
           "max_time_in_vehicle_s": {
             "type": "integer",
@@ -2478,9 +2547,6 @@
           "id": {
             "type": "string"
           },
-          "capacity": {
-            "type": "number"
-          },
           "available_count": {
             "type": "number"
           },
@@ -2522,6 +2588,20 @@
             "items": {
               "$ref": "#/components/schemas/LoadClassGroup"
             }
+          },
+          "capacity": {
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/UnitLoad"
+                }
+              }
+            ],
+            "description": "What one vehicle of this type carries, in the same units as the stops'\nloads: a bare number, or an array of per-unit entries (`[{\"unit\":\n\"pallets\", \"value\": 10}, {\"unit\": \"kg\", \"value\": 800}]`) once the\nplan names units. Absent = unlimited."
           },
           "force_allow_sites": {
             "type": "array",
@@ -2700,6 +2780,13 @@
           "fleetDiagnostics": {
             "$ref": "#/components/schemas/FleetDiagnostics",
             "description": "Present only when the edit left stops no vehicle can serve."
+          },
+          "unitsDeclared": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Load units this batch DECLARED on the plan (first upsert naming units\nonly), in the plan's unit order."
           }
         },
         "required": [
@@ -2874,6 +2961,13 @@
           "fleetDiagnostics": {
             "$ref": "#/components/schemas/FleetDiagnostics",
             "description": "Present only when the edit left stops no vehicle can serve."
+          },
+          "unitsDeclared": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Load units this batch DECLARED on the plan (first upsert naming units\nonly), in the plan's unit order."
           },
           "rows": {
             "type": "array",
