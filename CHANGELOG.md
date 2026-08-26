@@ -3,6 +3,10 @@
 Version history of the generated `routing24-optimizer` skill content (SKILL.md +
 references/*) and `llms.txt`. Generated; do not edit by hand.
 
+## 8.3.0
+
+`routing24_map_image` now also returns `image_url`: the same frame at full resolution behind a temporary, unauthenticated https link, valid until `image_url_expires_at` (about 30 minutes). Fetch it with plain HTTP and no credentials. That is the only way to put the map into a file you produce (a PDF, a report, a slide) — the MCP image block reaches the conversation and is never written to a code sandbox — and it is the link to hand the user when they want to see the map bigger. The image block itself is now a downscaled preview so the whole result stays inside the host inline-result limit; `mimeType`/`width`/`height`/`bytes` describe the full-resolution frame at the URL. If a fetch is refused with `host_not_allowed`, the sandbox has an egress allowlist that needs `routing24.ai` added. `image_url` is absent when the upload failed; the preview is still there.
+
 ## 8.2.0
 
 Multi-unit loads. A plan can declare up to 4 named load units (independent capacity axes: pallets AND kg AND seats). `delivery`/`pickup`/`capacity` accept an array of per-unit entries over the declared unit names — {"delivery":[{"unit":"pallets","value":2},{"unit":"kg","value":300}]} — next to the existing bare number, which stays valid while the plan declares at most one unit. The list tools echo the same shape, the `units` SQL table maps unit names to the per-unit SQL columns (pickup_kg, capacity_seats), and `UpsertResult.unitsDeclared` reports units a batch declared. Unit names may be introduced only while the plan has none; after that an unknown name rejects the row.
