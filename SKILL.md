@@ -25,7 +25,7 @@ compatibility: >-
   under the user's session.
 metadata:
   author: Routinghub LLC
-  version: "8.4.0"
+  version: "9.0.0"
 ---
 
 # Routing24 route optimizer
@@ -314,7 +314,7 @@ Load these only as the task calls for them (progressive disclosure):
 
 ## Version & keeping current
 
-- This skill is **version 8.4.0**. Its bundled reference
+- This skill is **version 9.0.0**. Its bundled reference
   (`references/api.md` + `references/schema.json`) is generated from Routing24's
   own types and is correct as of this version.
 - The **always-current** copy of the full contract is served at

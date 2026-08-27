@@ -1,6 +1,6 @@
 # Routing24 route optimizer — API reference
 
-> Generated from Routing24's own types (skill version 8.4.0). The
+> Generated from Routing24's own types (skill version 9.0.0). The
 > always-current copy is served at https://routing24.com/llms.txt.
 
 The `routing24_*` tools, one section per tool. The shapes are the same
@@ -976,16 +976,17 @@ type AddressDiagnostics = {
   are independent; a class no stop carries is ignored; at most 64 distinct classes per task.
   Both ends of a transfer carry the same class.
 - **Shelf life**: on a plain stop `max_time_in_vehicle_s` bounds the time
-  from its `release_time_s` to the start of service — the clock is PINNED
-  at `release_time_s`, there is no departure-relative form, so a stop
-  without one is measured from the start of the planning horizon (0), which
-  is stricter, not looser: **always send `release_time_s` with it**. A stop
-  whose `tw_early_s` is later than `release_time_s` + the bound cannot be
-  served at all and rejects the solve. A plain stop carrying a
-  `pickup` load is dropped on its own instead (the bound covers
-  `delivery` goods, on board from the depot; a pickup load boards at
-  service and rides on unbounded): the solve runs and that stop comes back
-  in `unassigned`, reported as `field_not_applicable`.
+  from the serving trip's depot departure to the start of service. The
+  departure is the one the result shows, and the planner moves it later
+  where that shortens the time on board, so only unavoidable waiting
+  counts. `release_time_s` is a lower bound on the departure, never the
+  clock's anchor: the field works with or without one, and no window is
+  out of reach for any budget. On a vehicle that reloads, every trip's
+  clock starts at that trip's own departure. A plain stop carrying a
+  `pickup` load is dropped on its own (the bound covers `delivery`
+  goods, on board from the departure; a pickup load boards at service and
+  rides on unbounded): the solve runs and that stop comes back in
+  `unassigned`, reported as `field_not_applicable`.
   On a linked (pickup & delivery)
   stop it instead bounds the ride time from pickup to delivery (waiting
   counts; a reload does not reset it) — set identically on every end of the
@@ -996,12 +997,13 @@ type AddressDiagnostics = {
   `max_time_in_vehicle_s`, priced at the vehicle's `cost.ride_overtime`)
   allows a priced band of ride time past the bound; beyond it the bound is
   hard. On a plain (depot) stop the field does not apply: that stop is left
-  unassigned with a reason, rather than rejecting the call. A bounded
-  LINKED stop combines with driver breaks: break placement avoids the
-  pickup-to-delivery span where it can, and a break placed inside it
-  counts as ride time, priced against the bound and its band. On a solve,
-  a pair whose ride cannot fit bound + band around the mandated breaks is
-  simply not served: both ends come back in `unassigned`. `shelf_life`
+  unassigned with a reason, rather than rejecting the call. A bounded stop
+  of either kind combines with driver breaks: break placement avoids the
+  bounded stretch where it can, and a break placed inside it counts as
+  ride time, priced against the bound and, on a linked stop, its band. On
+  a solve, a stop whose ride cannot fit around the mandated breaks is
+  simply not served: it comes back in `unassigned`, both ends of a pair
+  together. `shelf_life`
   problem rows appear only on evaluated or manually edited routes.
 - Vehicle `force_allow_sites`/`force_deny_sites`/`reload_depots` reference the
   plan's stop/depot business ids.
@@ -1036,7 +1038,7 @@ type AddressDiagnostics = {
   leg: a single leg longer than `max_driving_s` cannot be repaired and
   reports `break_schedule`.
   Planned breaks come back as `type:"break"` stops in `routing24_route`.
-  Breaks combine with ride-bounded transfers: see **Shelf life** above.
+  Breaks combine with ride-bounded stops of either kind: see **Shelf life** above.
 
 ### `routing24_delete_stops` / `routing24_delete_vehicles` / `routing24_delete_depots` / `routing24_delete_addresses` — `DeleteByIdsInput` → `DeleteResult`
 Delete entities of the loaded plan by business id — one tool per kind. Deletes

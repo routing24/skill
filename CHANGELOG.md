@@ -3,6 +3,10 @@
 Version history of the generated `routing24-optimizer` skill content (SKILL.md +
 references/*) and `llms.txt`. Generated; do not edit by hand.
 
+## 9.0.0
+
+Shelf life changed meaning on plain stops. `max_time_in_vehicle_s` now runs from the serving trip's depot departure, not from `release_time_s`. The previous contract told assistants to always send `release_time_s` alongside it, because an unset release anchored the clock at the start of the planning horizon and made the field unusable; that advice is now wrong and the field works with or without one. `release_time_s` keeps its own meaning as the earliest the goods may leave. Two rejections are gone with it: a stop whose `tw_early_s` fell past `release_time_s` + the bound no longer fails the solve, and a bounded stop no longer conflicts with driver breaks on any vehicle. On a vehicle that reloads, every trip's clock starts at that trip's own departure. No tool signature changed.
+
 ## 8.4.0
 
 `routing24_upsert_stops` / `routing24_upsert_depots` rows accept `coordinates: {lat, lng}`. A place you already hold exact coordinates for is pinned to that point and never geocoded, so a batch of vague or foreign-language addresses you have coordinates for no longer depends on the geocoder. A decimal "lat, lng" address literal ("25.19882, 55.27939") does the same thing and always did — it is now documented on the `address` field. With both, the address stays the label; with coordinates alone the label becomes the literal. Input only: no tool returns coordinates, and out-of-range values reject that row alone.
