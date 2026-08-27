@@ -25,7 +25,7 @@ compatibility: >-
   under the user's session.
 metadata:
   author: Routinghub LLC
-  version: "8.3.0"
+  version: "8.4.0"
 ---
 
 # Routing24 route optimizer
@@ -66,7 +66,7 @@ this skill applies unchanged.
 
 ### Connector guidance
 
-Tools execute inside the user's own signed-in Routing24 browser tab at https://routing24.com/app — that page must stay open, in the browser signed in to the account that approved this connector; with no tab connected every call fails fast. The MCP endpoint host (routing24.ai) serves this server only, never the app — do not send the user there. Long solves are fire-and-poll: start with routing24_reoptimize_plan, then loop on routing24_status until phase is "done" or "error" — while a solve runs each status call holds its reply up to ~15s, so call it back-to-back without sleeping. Every plan-scoped tool takes optional plan_id and session_id. Your first mutating call starts your SESSION (your editing lane, bound to a plan and tab); its id arrives in the result echo — pin session_id (plus plan_id, from routing24_new_plan / routing24_list_plans) on every later call. Omitted, calls follow your session; with no session yet, the focused tab's plan (which moves when the user switches tabs). Several assistants may work at once: each in its own session, edits are versioned and attributed, and no plan is locked against another assistant. Every plan-scoped result echoes plan.rev / plan.lastEditBy — if rev moved since your last call and lastEditBy isn't you, the user or another assistant changed the plan: re-read before editing. If you edit WITHOUT having seen the latest state, the first such call is rejected once with the drift details (new rev, who edited) and changes nothing — re-read what you rely on, then retry; the same call is then accepted. To WATCH a plan someone else drives, long-poll routing24_status with since_rev — it replies the moment the plan changes. To CONTINUE another assistant's work, read routing24_session_log for its session, then pin that session_id (adoption). routing24_list_loaded_plans shows the open tabs and their sessions; routing24_load_plan opens a plan into one. Prefer the typed tools for data changes: routing24_upsert_* / routing24_delete_* handle geocoding, cross-references and cascading deletes. Use routing24_sql_query for reads and aggregations over the plan tables, routing24_sql_update for bulk field updates by criteria, and routing24_run_script for algorithmic transforms. Their writes apply immediately, validated and atomic — no in-app confirmation — and every change is one routing24_undo step; the user watches the plan live and can take control at any time. routing24_map_image returns the plan as a real map image (pins + route lines) — call it to see what the user sees.
+Tools execute inside the user's own signed-in Routing24 browser tab at https://routing24.com/app — that page must stay open, in the browser signed in to the account that approved this connector; with no tab connected every call fails fast. The MCP endpoint host (routing24.ai) serves this server only, never the app — do not send the user there. Long solves are fire-and-poll: start with routing24_reoptimize_plan, then loop on routing24_status until phase is "done" or "error" — while a solve runs each status call holds its reply up to ~15s, so call it back-to-back without sleeping. Every plan-scoped tool takes optional plan_id and session_id. Your first mutating call starts your SESSION (your editing lane, bound to a plan and tab); its id arrives in the result echo — pin session_id (plus plan_id, from routing24_new_plan / routing24_list_plans) on every later call. Omitted, calls follow your session; with no session yet, the focused tab's plan (which moves when the user switches tabs). Several assistants may work at once: each in its own session, edits are versioned and attributed, and no plan is locked against another assistant. Every plan-scoped result echoes plan.rev / plan.lastEditBy — if rev moved since your last call and lastEditBy isn't you, the user or another assistant changed the plan: re-read before editing. If you edit WITHOUT having seen the latest state, the first such call is rejected once with the drift details (new rev, who edited) and changes nothing — re-read what you rely on, then retry; the same call is then accepted. To WATCH a plan someone else drives, long-poll routing24_status with since_rev — it replies the moment the plan changes. To CONTINUE another assistant's work, read routing24_session_log for its session, then pin that session_id (adoption). routing24_list_loaded_plans shows the open tabs and their sessions; routing24_load_plan opens a plan into one. Prefer the typed tools for data changes: routing24_upsert_* / routing24_delete_* handle geocoding, cross-references and cascading deletes. If you already hold exact coordinates for a stop or depot, pin them on the upsert row (coordinates: {lat, lng}, or the same point as a "lat, lng" address literal) instead of having the address geocoded. Use routing24_sql_query for reads and aggregations over the plan tables, routing24_sql_update for bulk field updates by criteria, and routing24_run_script for algorithmic transforms. Their writes apply immediately, validated and atomic — no in-app confirmation — and every change is one routing24_undo step; the user watches the plan live and can take control at any time. routing24_map_image returns the plan as a real map image (pins + route lines) — call it to see what the user sees. Beside the inline preview its result carries image_url: the same frame at full resolution on a temporary unauthenticated https link on routing24.ai, fetchable with plain HTTP and no credentials. That link is the only way to put the map into a file you produce (a report, a PDF, a slide) — the inline image block never reaches a sandbox filesystem. If your code sandbox restricts outbound network access it will refuse the fetch (host_not_allowed); routing24.ai has to be in its allowed hosts, which the user can settle once now rather than mid-report.
 
 ## Plans & paid features
 
@@ -120,11 +120,13 @@ retry the call hoping for a different answer.
 2. **Parse the request** into entity batches — depot row(s), vehicle rows, stop
    rows (see the *API reference* for the row shapes). Times are
    seconds-since-midnight; every row needs a caller-chosen `id` (the business
-   id every other tool refers to). The `address` string is the ONLY location
-   carrier — no tool takes or returns coordinates. A caller holding exact
-   coordinates sends them AS the address: a decimal `"lat, lng"` literal
-   (e.g. `"25.19882, 55.27939"`) resolves to that exact point and stays the
-   row's address label. A solve needs **≥1 stop**, **≥1 vehicle**
+   id every other tool refers to). Locations go in as text — the `address`
+   string, geocoded internally; no tool RETURNS coordinates. When you already
+   hold exact coordinates, pin them instead of relying on the geocoder: stop
+   and depot rows take `coordinates: {lat, lng}`, and a decimal
+   `"lat, lng"` address literal (e.g. `"25.19882, 55.27939"`) does the
+   same. Pinned rows keep the address you sent as their label, or the literal
+   when you sent none. A solve needs **≥1 stop**, **≥1 vehicle**
    and a depot; with a single stop there is nothing to sequence, so expect
    real requests to carry ≥2 stops. Bad input makes a call reject with a
    message naming the offending fields — relay it to the user.
@@ -312,7 +314,7 @@ Load these only as the task calls for them (progressive disclosure):
 
 ## Version & keeping current
 
-- This skill is **version 8.3.0**. Its bundled reference
+- This skill is **version 8.4.0**. Its bundled reference
   (`references/api.md` + `references/schema.json`) is generated from Routing24's
   own types and is correct as of this version.
 - The **always-current** copy of the full contract is served at

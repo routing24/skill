@@ -3,6 +3,10 @@
 Version history of the generated `routing24-optimizer` skill content (SKILL.md +
 references/*) and `llms.txt`. Generated; do not edit by hand.
 
+## 8.4.0
+
+`routing24_upsert_stops` / `routing24_upsert_depots` rows accept `coordinates: {lat, lng}`. A place you already hold exact coordinates for is pinned to that point and never geocoded, so a batch of vague or foreign-language addresses you have coordinates for no longer depends on the geocoder. A decimal "lat, lng" address literal ("25.19882, 55.27939") does the same thing and always did — it is now documented on the `address` field. With both, the address stays the label; with coordinates alone the label becomes the literal. Input only: no tool returns coordinates, and out-of-range values reject that row alone.
+
 ## 8.3.0
 
 `routing24_map_image` now also returns `image_url`: the same frame at full resolution behind a temporary, unauthenticated https link, valid until `image_url_expires_at` (about 30 minutes). Fetch it with plain HTTP and no credentials. That is the only way to put the map into a file you produce (a PDF, a report, a slide) — the MCP image block reaches the conversation and is never written to a code sandbox — and it is the link to hand the user when they want to see the map bigger. The image block itself is now a downscaled preview so the whole result stays inside the host inline-result limit; `mimeType`/`width`/`height`/`bytes` describe the full-resolution frame at the URL. If a fetch is refused with `host_not_allowed`, the sandbox has an egress allowlist that needs `routing24.ai` added. `image_url` is absent when the upload failed; the preview is still there.

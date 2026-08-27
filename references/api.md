@@ -1,6 +1,6 @@
 # Routing24 route optimizer — API reference
 
-> Generated from Routing24's own types (skill version 8.3.0). The
+> Generated from Routing24's own types (skill version 8.4.0). The
 > always-current copy is served at https://routing24.com/llms.txt.
 
 The `routing24_*` tools, one section per tool. The shapes are the same
@@ -775,7 +775,7 @@ create a plan and never delete anything; the changes affect the NEXT solve
 ```ts
 // Input for `routing24_upsert_stops`.
 type UpsertStopsInput = {
-    stops: ({ service_duration_s?: number; priority?: number; required_tags?: string[]; forbidden_tags?: string[]; group?: string; transfer_type?: "delivery" | "pickup" | "depot"; transfer_id?: string; no_break?: boolean; load_class?: string; sequence_group?: string; sequence_rank?: number; address?: string; area?: string; delivery?: number | { unit: string; value: number }[]; pickup?: number | { unit: string; value: number }[]; max_time_in_vehicle_s?: integer; max_ride_overtime_s?: integer; id: string; status?: "geocoded" | "ungeocoded"; tw_early_s?: null | number; tw_late_s?: null | number; release_time_s?: null | number })[];  // min 1
+    stops: ({ service_duration_s?: number; priority?: number; required_tags?: string[]; forbidden_tags?: string[]; group?: string; transfer_type?: "delivery" | "pickup" | "depot"; transfer_id?: string; no_break?: boolean; load_class?: string; sequence_group?: string; sequence_rank?: number; address?: string; area?: string; delivery?: number | { unit: string; value: number }[]; pickup?: number | { unit: string; value: number }[]; max_time_in_vehicle_s?: integer; max_ride_overtime_s?: integer; id: string; status?: "geocoded" | "ungeocoded"; tw_early_s?: null | number; tw_late_s?: null | number; release_time_s?: null | number; coordinates?: { lat: number; lng: number } })[];  // min 1
 };
 ```
 ```ts
@@ -788,7 +788,7 @@ type UpsertVehiclesInput = {
 ```ts
 // Input for `routing24_upsert_depots`.
 type UpsertDepotsInput = {
-    depots: ({ service_duration_s?: number; no_break?: boolean; address?: string; area?: string; id: string; status?: "geocoded" | "ungeocoded"; tw_early_s?: null | number; tw_late_s?: null | number })[];  // min 1
+    depots: ({ service_duration_s?: number; no_break?: boolean; address?: string; area?: string; id: string; status?: "geocoded" | "ungeocoded"; tw_early_s?: null | number; tw_late_s?: null | number; coordinates?: { lat: number; lng: number } })[];  // min 1
 };
 ```
 ```ts
@@ -810,7 +810,7 @@ type UpsertAddressesInput = {
 // is in seconds — `tw_early_s`/`tw_late_s`/`release_time_s` counted from
 // midnight, `service_duration_s` a duration.
 type StopRow = {
-    address?: string;  // The WHOLE place the user named, spelling fixed — every part they wrote (building, tower, unit, street). Order words riding in the same line ("pickup 2", a quantity) are NOT part of the address and never become one: they belong in the load fields.
+    address?: string;  // The WHOLE place the user named, spelling fixed — every part they wrote (building, tower, unit, street). Order words riding in the same line ("pickup 2", a quantity) are NOT part of the address and never become one: they belong in the load fields. A decimal "lat, lng" literal ("25.19882, 55.27939") is a valid address: it pins that exact point, skips the geocoder and stays the row's label.
     area?: string;  // Optional area/city qualifier shown after the address (the address book's `address`+`area` identity). The `routing24_list_*` tools return it on every stop/depot row, so accepting it here is what makes that row writable back through `routing24_upsert_stops`/`_depots` unchanged.
     service_duration_s?: number;
     tw_early_s?: number;  // Window opens, seconds since midnight. Absent = opens with the day.
@@ -841,7 +841,7 @@ type StopRow = {
 // `service_duration_s` in seconds. `status` is reported on
 // `routing24_list_depots` rows; accepted and ignored on upsert.
 type DepotRow = {
-    address?: string;  // The WHOLE place the user named, spelling fixed — every part they wrote (building, tower, unit, street). Order words riding in the same line ("pickup 2", a quantity) are NOT part of the address and never become one: they belong in the load fields.
+    address?: string;  // The WHOLE place the user named, spelling fixed — every part they wrote (building, tower, unit, street). Order words riding in the same line ("pickup 2", a quantity) are NOT part of the address and never become one: they belong in the load fields. A decimal "lat, lng" literal ("25.19882, 55.27939") is a valid address: it pins that exact point, skips the geocoder and stays the row's label.
     area?: string;  // Optional area/city qualifier shown after the address (the address book's `address`+`area` identity). The `routing24_list_*` tools return it on every stop/depot row, so accepting it here is what makes that row writable back through `routing24_upsert_stops`/`_depots` unchanged.
     service_duration_s?: number;  // Handling time at the depot, seconds. Absent = none.
     tw_early_s?: number;  // Opens at, seconds since midnight. Absent = open from any time.

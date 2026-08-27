@@ -25,9 +25,9 @@ routing24_upsert_addresses({
 });
 
 // 3) Build the plan piece by piece, then solve. Every row needs an `id` (the
-//    business id every other tool refers to). The address string is the only
-//    location carrier — a decimal "lat, lng" literal works as an address for
-//    callers holding exact coordinates. Geocode failures come back in
+//    business id every other tool refers to). The address is geocoded
+//    internally; a row you hold exact coordinates for pins them instead, with
+//    `coordinates` or a "lat, lng" address literal. Geocode failures come back in
 //    addressDiagnostics; resolve them before solving.
 routing24_upsert_depots({
     depots: [{ id: "D1", address: "DEPOT ADDRESS" }],
@@ -58,6 +58,8 @@ routing24_upsert_stops({
         // everything fits. required_tags: only a vehicle carrying these tags may serve it.
         { id: "S1", address: "STOP 1 ADDRESS", delivery: 1, service_duration_s: 300, priority: 10 },
         { id: "S2", address: "STOP 2 ADDRESS", delivery: 1, service_duration_s: 300, required_tags: ["reefer"] },
+        // A stop you hold exact coordinates for: pinned, never geocoded.
+        { id: "S3", coordinates: { lat: 25.19882, lng: 55.27939 }, delivery: 1 },
     ],
 });
 routing24_reoptimize_plan({}); // options: { time_limit_s: 30 }

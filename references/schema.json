@@ -1778,7 +1778,7 @@
         "properties": {
           "address": {
             "type": "string",
-            "description": "The WHOLE place the user named, spelling fixed — every part they wrote\n(building, tower, unit, street). Order words riding in the same line\n(\"pickup 2\", a quantity) are NOT part of the address and never become\none: they belong in the load fields."
+            "description": "The WHOLE place the user named, spelling fixed — every part they wrote\n(building, tower, unit, street). Order words riding in the same line\n(\"pickup 2\", a quantity) are NOT part of the address and never become\none: they belong in the load fields. A decimal \"lat, lng\" literal\n(\"25.19882, 55.27939\") is a valid address: it pins that exact point,\nskips the geocoder and stays the row's label."
           },
           "area": {
             "type": "string",
@@ -1917,7 +1917,7 @@
           "unit",
           "value"
         ],
-        "description": "One per-unit load amount of a {@link LoadInput} entry array."
+        "description": "One per-unit load amount in a `delivery`/`pickup`/`capacity` entry array."
       },
       "ListVehiclesResult": {
         "type": "object",
@@ -2103,7 +2103,7 @@
           }
         },
         "required": [],
-        "description": "Per-vehicle cost rates. An omitted field means 0. Exception: when NO\nvehicle in the fleet has a nonzero `distance`, `duration` or\n`load_distance` rate, the optimizer falls back to the default rates of\n1 per km (or mile) plus 1 per hour, minimizing distance and time\ntogether (so an all-blank fleet still gets sensible routes); setting\nevery cost to an explicit 0 triggers the same fallback plus a warning.\nAn explicit 0 is meaningful in a mixed fleet (e.g. a bike with free\nmileage next to a priced van)."
+        "description": "Per-vehicle cost rates. An omitted field means 0. Exception: when NO\nvehicle in the fleet has a nonzero `distance`, `duration` or\n`load_distance` rate, the optimizer falls back to the default rates of\n1 per km (or mile) plus 1 per hour, minimizing distance and time\ntogether; setting every cost to an explicit 0 triggers the same\nfallback plus a warning.\nAn explicit 0 is meaningful in a mixed fleet (e.g. a bike with free\nmileage next to a priced van)."
       },
       "VehicleBreakRule": {
         "type": "object",
@@ -2188,7 +2188,7 @@
         "properties": {
           "address": {
             "type": "string",
-            "description": "The WHOLE place the user named, spelling fixed — every part they wrote\n(building, tower, unit, street). Order words riding in the same line\n(\"pickup 2\", a quantity) are NOT part of the address and never become\none: they belong in the load fields."
+            "description": "The WHOLE place the user named, spelling fixed — every part they wrote\n(building, tower, unit, street). Order words riding in the same line\n(\"pickup 2\", a quantity) are NOT part of the address and never become\none: they belong in the load fields. A decimal \"lat, lng\" literal\n(\"25.19882, 55.27939\") is a valid address: it pins that exact point,\nskips the geocoder and stays the row's label."
           },
           "area": {
             "type": "string",
@@ -2359,7 +2359,7 @@
           },
           "address": {
             "type": "string",
-            "description": "The WHOLE place the user named, spelling fixed — every part they wrote\n(building, tower, unit, street). Order words riding in the same line\n(\"pickup 2\", a quantity) are NOT part of the address and never become\none: they belong in the load fields."
+            "description": "The WHOLE place the user named, spelling fixed — every part they wrote\n(building, tower, unit, street). Order words riding in the same line\n(\"pickup 2\", a quantity) are NOT part of the address and never become\none: they belong in the load fields. A decimal \"lat, lng\" literal\n(\"25.19882, 55.27939\") is a valid address: it pins that exact point,\nskips the geocoder and stays the row's label."
           },
           "area": {
             "type": "string",
@@ -2445,12 +2445,34 @@
                 "type": "number"
               }
             ]
+          },
+          "coordinates": {
+            "type": "object",
+            "properties": {
+              "lat": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90,
+                "description": "Latitude in decimal degrees, -90..90."
+              },
+              "lng": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180,
+                "description": "Longitude in decimal degrees, -180..180."
+              }
+            },
+            "required": [
+              "lat",
+              "lng"
+            ],
+            "description": "Exact coordinates you already hold, instead of having the `address`\ngeocoded. The row is placed on this point and the geocoder is not\ncalled, so send only coordinates the user gave you, never remembered\nones. With an `address` too, the address stays the row's label; without\none the label becomes \"lat, lng\". A decimal \"lat, lng\" `address` literal\ndoes the same thing. INPUT only: no tool returns coordinates."
           }
         },
         "required": [
           "id"
         ],
-        "description": "{@link StopRow} with clearable bounds (see above)."
+        "description": "One row of `routing24_upsert_stops`. The fields `routing24_list_stops`\nreturns, plus `coordinates`; the optional constraint bounds also take\n`null`, which clears them."
       },
       "UpsertDepotsInput": {
         "type": "object",
@@ -2480,7 +2502,7 @@
           },
           "address": {
             "type": "string",
-            "description": "The WHOLE place the user named, spelling fixed — every part they wrote\n(building, tower, unit, street). Order words riding in the same line\n(\"pickup 2\", a quantity) are NOT part of the address and never become\none: they belong in the load fields."
+            "description": "The WHOLE place the user named, spelling fixed — every part they wrote\n(building, tower, unit, street). Order words riding in the same line\n(\"pickup 2\", a quantity) are NOT part of the address and never become\none: they belong in the load fields. A decimal \"lat, lng\" literal\n(\"25.19882, 55.27939\") is a valid address: it pins that exact point,\nskips the geocoder and stays the row's label."
           },
           "area": {
             "type": "string",
@@ -2518,12 +2540,34 @@
                 "type": "number"
               }
             ]
+          },
+          "coordinates": {
+            "type": "object",
+            "properties": {
+              "lat": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90,
+                "description": "Latitude in decimal degrees, -90..90."
+              },
+              "lng": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180,
+                "description": "Longitude in decimal degrees, -180..180."
+              }
+            },
+            "required": [
+              "lat",
+              "lng"
+            ],
+            "description": "Exact coordinates you already hold, instead of having the `address`\ngeocoded. The row is placed on this point and the geocoder is not\ncalled, so send only coordinates the user gave you, never remembered\nones. With an `address` too, the address stays the row's label; without\none the label becomes \"lat, lng\". A decimal \"lat, lng\" `address` literal\ndoes the same thing. INPUT only: no tool returns coordinates."
           }
         },
         "required": [
           "id"
         ],
-        "description": "{@link DepotRow} with clearable bounds (see above)."
+        "description": "One row of `routing24_upsert_depots`. The fields `routing24_list_depots`\nreturns, plus `coordinates`; the optional constraint bounds also take\n`null`, which clears them."
       },
       "UpsertVehiclesInput": {
         "type": "object",
@@ -2685,7 +2729,7 @@
         "required": [
           "id"
         ],
-        "description": "{@link VehicleRow} with clearable bounds (see above)."
+        "description": "One row of `routing24_upsert_vehicles`. The fields\n`routing24_list_vehicles` returns; the optional constraint bounds also take\n`null`, which clears them."
       },
       "UpsertAddressesInput": {
         "type": "object",
