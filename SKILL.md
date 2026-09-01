@@ -25,7 +25,7 @@ compatibility: >-
   under the user's session.
 metadata:
   author: Routinghub LLC
-  version: "9.1.0"
+  version: "9.2.0"
 ---
 
 # Routing24 route optimizer
@@ -265,9 +265,12 @@ speculatively; prefer a compensating `routing24_edit_*` call.
 
 An agent that can already run JavaScript in the user's tab (Claude in Chrome or
 Cowork, or any WebMCP-capable host) does not need the connector: the app
-registers the same `routing24_*` tools on `document.modelContext`, and bundles a
-polyfill so they exist without native browser support. (`navigator.modelContext`
-is a deprecated alias kept for older hosts.)
+registers the same `routing24_*` tools on the browser's native
+`document.modelContext` (WebMCP). The surface exists only where the browser
+ships WebMCP — on routing24.com that is Chrome 149–156, enabled automatically
+through Routing24's origin-trial token; older Chromes expose the same object as
+`navigator.modelContext`. In a browser without WebMCP these tools are absent —
+use the MCP connector instead.
 
 Everything else in this skill is unchanged — same tools, same arguments, same
 results. Only the call mechanism differs: `executeTool` takes the tool OBJECT
@@ -314,7 +317,7 @@ Load these only as the task calls for them (progressive disclosure):
 
 ## Version & keeping current
 
-- This skill is **version 9.1.0**. Its bundled reference
+- This skill is **version 9.2.0**. Its bundled reference
   (`references/api.md` + `references/schema.json`) is generated from Routing24's
   own types and is correct as of this version.
 - The **always-current** copy of the full contract is served at

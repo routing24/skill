@@ -3,6 +3,10 @@
 Version history of the generated `routing24-optimizer` skill content (SKILL.md +
 references/*) and `llms.txt`. Generated; do not edit by hand.
 
+## 9.2.0
+
+The in-page WebMCP surface is native-only: the bundled polyfill is gone, so the routing24_* tools exist on document.modelContext only where the browser ships WebMCP (on routing24.com that is Chrome 149-156 via Routing24's origin trial; older Chromes expose the same object as navigator.modelContext). A browser without WebMCP has no in-page tools - connect the MCP server instead. Tool names, arguments and results are unchanged on every surface.
+
 ## 9.1.0
 
 llms.txt gains a "Key links" section (markdown links to the app, the skill download, the MCP server documentation, support, the blog and this repo), and the URLs it already carried inline are markdown links now. Documentation only: no tool signature or behavior changed.
