@@ -25,7 +25,7 @@ compatibility: >-
   under the user's session.
 metadata:
   author: Routinghub LLC
-  version: "9.0.0"
+  version: "9.1.0"
 ---
 
 # Routing24 route optimizer
@@ -314,16 +314,18 @@ Load these only as the task calls for them (progressive disclosure):
 
 ## Version & keeping current
 
-- This skill is **version 9.0.0**. Its bundled reference
+- This skill is **version 9.1.0**. Its bundled reference
   (`references/api.md` + `references/schema.json`) is generated from Routing24's
   own types and is correct as of this version.
 - The **always-current** copy of the full contract is served at
-  `https://routing24.com/llms.txt` (regenerated from the deployed API on every release). If a
-  call rejects with a validation error that looks like a field this reference
-  doesn't describe, fetch that URL and use its schema — then consider
-  re-downloading the latest skill from `https://routing24.com/routing24.skill`.
-- To update the skill itself, re-download `https://routing24.com/routing24.skill` and re-install
-  it; that is the update mechanism.
+  [https://routing24.com/llms.txt](https://routing24.com/llms.txt) (regenerated from the deployed API on
+  every release). If a call rejects with a validation error that looks like a
+  field this reference doesn't describe, fetch that URL and use its schema —
+  then consider re-downloading the latest skill from
+  [https://routing24.com/routing24.skill](https://routing24.com/routing24.skill).
+- To update the skill itself, re-download
+  [https://routing24.com/routing24.skill](https://routing24.com/routing24.skill) and re-install it; that is the
+  update mechanism.
 
 ## Notes & pitfalls
 

@@ -3,6 +3,10 @@
 Version history of the generated `routing24-optimizer` skill content (SKILL.md +
 references/*) and `llms.txt`. Generated; do not edit by hand.
 
+## 9.1.0
+
+llms.txt gains a "Key links" section (markdown links to the app, the skill download, the MCP server documentation, support, the blog and this repo), and the URLs it already carried inline are markdown links now. Documentation only: no tool signature or behavior changed.
+
 ## 9.0.0
 
 Shelf life changed meaning on plain stops. `max_time_in_vehicle_s` now runs from the serving trip's depot departure, not from `release_time_s`. The previous contract told assistants to always send `release_time_s` alongside it, because an unset release anchored the clock at the start of the planning horizon and made the field unusable; that advice is now wrong and the field works with or without one. `release_time_s` keeps its own meaning as the earliest the goods may leave. Two rejections are gone with it: a stop whose `tw_early_s` fell past `release_time_s` + the bound no longer fails the solve, and a bounded stop no longer conflicts with driver breaks on any vehicle. On a vehicle that reloads, every trip's clock starts at that trip's own departure. No tool signature changed.
