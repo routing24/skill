@@ -3369,7 +3369,7 @@
         "properties": {
           "code": {
             "type": "string",
-            "description": "JavaScript/TypeScript for the plan sandbox. Mutate `data` entity\nfields; delete via deleteSites/deleteVehicles/deleteDepots(predicate);\nassign a short JSON-serializable summary to `__output`."
+            "description": "JavaScript/TypeScript for the plan sandbox. Mutate `data` entity\nfields; create entities with createSites/createVehicles/createDepots\n(rows); delete via deleteSites/deleteVehicles/deleteDepots(predicate);\nsave a named selection with select(name, rows); assign a short\nJSON-serializable summary to `__output`."
           }
         },
         "required": [
@@ -3541,6 +3541,32 @@
           },
           "fleetDiagnostics": {
             "$ref": "#/components/schemas/FleetDiagnostics"
+          },
+          "creationsMarked": {
+            "type": "number",
+            "description": "New rows the script authored (createSites/…), before validation."
+          },
+          "createdEntities": {
+            "type": "number",
+            "description": "Entities actually created (geocoded + committed with the run)."
+          },
+          "unitsDeclared": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Load units this script's created rows newly declared on the plan."
+          },
+          "selections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScriptSelection"
+            },
+            "description": "Selections the script saved, materialized as sel_* temp tables."
+          },
+          "relocatedEntities": {
+            "type": "number",
+            "description": "Entities relocated by the script writing `address`/`area` (the new\ntext was re-geocoded; a failed geocode is reported in `warnings`)."
           }
         },
         "required": [
@@ -3548,6 +3574,31 @@
           "journaledWrites"
         ],
         "description": "Result of `routing24_run_script`."
+      },
+      "ScriptSelection": {
+        "type": "object",
+        "properties": {
+          "sel_table": {
+            "type": "string",
+            "description": "The temp table name (`sel_<name>`), holding one `uuid` column."
+          },
+          "count": {
+            "type": "number"
+          },
+          "sample": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Up to 5 business ids of the selected rows."
+          }
+        },
+        "required": [
+          "sel_table",
+          "count",
+          "sample"
+        ],
+        "description": "One named selection a script saved with `select(name, rows)`, already\nmaterialized as a temp table usable in `routing24_sql_query`."
       },
       "MapImageInput": {
         "type": "object",

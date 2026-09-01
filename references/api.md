@@ -1197,8 +1197,9 @@ SQLite over the loaded plan's live data: `sites`, `vehicles`, `depots`,
 rejected); `routing24_sql_update` collects UPDATEs on the writable columns of
 sites/vehicles/depots, validates them, and applies atomically — validation
 failures change nothing, and every applied change is one `routing24_undo`
-step. INSERT/DELETE are rejected: create with `routing24_upsert_*`, delete
-with `routing24_delete_*` or by criteria with `routing24_run_script`. The
+step. INSERT/DELETE are rejected: create with `routing24_upsert_*` (or
+generate by criteria with `routing24_run_script`), delete with
+`routing24_delete_*` or by criteria with `routing24_run_script`. The
 runtime tool description carries the full commented per-column schema.
 ```ts
 // Input for `routing24_sql_query`.
@@ -1239,16 +1240,20 @@ type SqlUpdateResult = {
 
 ### `routing24_run_script` — `RunScriptInput` → `RunScriptResult`
 Sandboxed JavaScript/TypeScript against a draft of the loaded plan: mutate
-entity fields in `data`, delete via `deleteSites`/`deleteVehicles`/
-`deleteDepots(predicate)`, assign a JSON-serializable summary to `__output`.
-Journaled writes validate and apply atomically (one `routing24_undo` step); a
-run with no writes returns `__output` only — usable for pure analysis. 20 s
-budget, one run at a time. The runtime tool description carries the sandbox
-globals reference.
+entity fields in `data`, create entities with `createSites`/`createVehicles`/
+`createDepots(rows)` (complete new rows with fresh ids; addresses geocode on
+apply — rows returned in `__output` are NOT created), delete via
+`deleteSites`/`deleteVehicles`/`deleteDepots(predicate)`, save a named
+selection with `select(name, rows)` (a `sel_*` temp table usable in
+`routing24_sql_query`), assign a JSON-serializable summary to `__output`.
+Journaled writes, creations and delete marks validate and apply atomically
+(one `routing24_undo` step); a run with no changes returns `__output` only —
+usable for pure analysis. 20 s budget, one run at a time. The runtime tool
+description carries the sandbox globals reference.
 ```ts
 // Input for `routing24_run_script`.
 type RunScriptInput = {
-    code: string;  // JavaScript/TypeScript for the plan sandbox. Mutate `data` entity fields; delete via deleteSites/deleteVehicles/deleteDepots(predicate); assign a short JSON-serializable summary to `__output`.
+    code: string;  // JavaScript/TypeScript for the plan sandbox. Mutate `data` entity fields; create entities with createSites/createVehicles/createDepots (rows); delete via deleteSites/deleteVehicles/deleteDepots(predicate); save a named selection with select(name, rows); assign a short JSON-serializable summary to `__output`.
 };
 ```
 ```ts
@@ -1265,6 +1270,11 @@ type RunScriptResult = {
     errors?: { kind: string; id: string; message: string }[];  // Validation rejections — nothing was applied.
     warnings?: string[];
     fleetDiagnostics?: { summary: string; problems: { category: "vehicle_incompatible"; count: number; explanation: string; lever: string }[] };
+    creationsMarked?: number;  // New rows the script authored (createSites/…), before validation.
+    createdEntities?: number;  // Entities actually created (geocoded + committed with the run).
+    unitsDeclared?: string[];  // Load units this script's created rows newly declared on the plan.
+    selections?: { sel_table: string; count: number; sample: string[] }[];  // Selections the script saved, materialized as sel_* temp tables.
+    relocatedEntities?: number;  // Entities relocated by the script writing `address`/`area` (the new text was re-geocoded; a failed geocode is reported in `warnings`).
 };
 ```
 
