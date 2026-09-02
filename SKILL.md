@@ -342,8 +342,11 @@ Load these only as the task calls for them (progressive disclosure):
   auto-saves unsaved changes first). When the user is
   **anonymous**, the plan is stored **only in this browser on this computer** and
   may be deleted later, so the plan link opens only here — it is not a durable
-  share link. Say this when you hand over the link. (Anonymous only happens on
-  the WebMCP surface. The connector always runs as a signed-in user, whose
+  share link. Say this when you hand over the link. An anonymous browser also
+  gets only 3 optimizations: past that
+  `routing24_reoptimize_plan` rejects and the app shows its sign-in dialog —
+  ask the user to sign up or log in there, then retry. (Anonymous only happens
+  on the WebMCP surface. The connector always runs as a signed-in user, whose
   plans persist to the account and open on their other devices.)
 - If `routing24_status` never leaves `matrix`/`solving`, the network (matrix
   service) or the solve may be slow — keep polling; only treat it as failed on
