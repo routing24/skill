@@ -3,6 +3,10 @@
 Version history of the generated `routing24-optimizer` skill content (SKILL.md +
 references/*) and `llms.txt`. Generated; do not edit by hand.
 
+## 9.2.1
+
+The plans table names Google Maps™ with its trademark symbol, matching the app copy. No tool or contract change.
+
 ## 9.2.0
 
 The in-page WebMCP surface is native-only: the bundled polyfill is gone, so the routing24_* tools exist on document.modelContext only where the browser ships WebMCP (on routing24.com that is Chrome 149-156 via Routing24's origin trial; older Chromes expose the same object as navigator.modelContext). A browser without WebMCP has no in-page tools - connect the MCP server instead. Tool names, arguments and results are unchanged on every surface.
