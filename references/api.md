@@ -732,6 +732,8 @@ type VehicleRow = {
     period_driving_limit_s?: number;  // PRO: Driver breaks & driving limits
     period_driven_s?: number;  // PRO: Driver breaks & driving limits
     no_mix_load_classes?: { classes: string[] }[];  // PRO: Product segregation (load classes)
+    speed_factor?: number;
+    approach_curbside?: boolean;
     capacity?: number | { unit: string; value: number }[];  // What one vehicle of this type carries, in the same units as the stops' loads: a bare number, or an array of per-unit entries (`[{"unit": "pallets", "value": 10}, {"unit": "kg", "value": 800}]`) once the plan names units. Absent = unlimited.
     id: string;
     force_allow_sites?: string[];  // PRO: Force allow / deny orders — Stop ids this vehicle type may serve even when tags forbid it — a PERMISSION override, not a reservation: other compatible vehicles can still take the stop. Precedence per vehicle: force_deny_sites beats force_allow_sites beats the tag rule. To make a stop exclusive to one vehicle, use tags (required_tags on the stop + that tag on only this vehicle) or force_deny_sites on every other vehicle.
@@ -1010,6 +1012,17 @@ type AddressDiagnostics = {
   `max_distance` is in the plan's display unit (km/mi); `cost.duration` and
   `cost.overtime` are per hour (`max_overtime_s` caps paid overtime past
   `max_duration_s`).
+- **Vehicle speed**: `speed_factor` (0.1..5, two decimals, absent = 1) divides
+  every leg's map travel time: 0.5 makes each leg twice as long, 2 half. It scales driving
+  time only; service, waiting and break times are unchanged. Everything that
+  is measured off travel time sees the scaled time: `max_duration_s`,
+  `tw_late_s`, break triggers, `period_driving_limit_s`, and the hourly
+  `cost.duration`, which is charged on the scaled time because the vehicle
+  is actually out that long, and because a slower vehicle that cost the same
+  per leg would never lose a long leg to a faster one. `cost.distance` and
+  `max_distance` are unaffected. `approach_curbside: true` computes that
+  vehicle's travel times and route geometry with every stop on the driving
+  side of its street.
 - **Vehicle costs**: `cost.distance` is per km/mi (the plan's display unit),
   `cost.fixed` per vehicle used, `cost.load_distance` per unit of load
   carried per km/mi (every leg charges the load on board times the leg

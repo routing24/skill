@@ -2012,6 +2012,12 @@
               "$ref": "#/components/schemas/LoadClassGroup"
             }
           },
+          "speed_factor": {
+            "type": "number"
+          },
+          "approach_curbside": {
+            "type": "boolean"
+          },
           "capacity": {
             "oneOf": [
               {
@@ -2633,6 +2639,9 @@
               "$ref": "#/components/schemas/LoadClassGroup"
             }
           },
+          "approach_curbside": {
+            "type": "boolean"
+          },
           "capacity": {
             "oneOf": [
               {
@@ -2716,6 +2725,16 @@
             ]
           },
           "max_distance": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "speed_factor": {
             "oneOf": [
               {
                 "type": "null"
