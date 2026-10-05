@@ -1,6 +1,6 @@
 # Routing24 route optimizer — API reference
 
-> Generated from Routing24's own types (skill version 9.2.1). The
+> Generated from Routing24's own types (skill version 10.0.0). The
 > always-current copy is served at https://routing24.com/llms.txt.
 
 The `routing24_*` tools, one section per tool. The shapes are the same
@@ -658,7 +658,7 @@ No input. Absolute URL of the current plan's optimize page.
 ### `routing24_cancel` → `{ ok: true }`
 No input. Aborts an in-flight solve (mirrors the UI's cancel button).
 
-### `routing24_list_stops` / `routing24_list_vehicles` / `routing24_list_depots` / `routing24_list_addresses` — `ListPageInput` → `ListStopsResult` / `ListVehiclesResult` / `ListDepotsResult` / `ListAddressesResult`
+### `routing24_list_stops` / `routing24_list_vehicles` / `routing24_list_depots` — `ListPageInput` → `ListStopsResult` / `ListVehiclesResult` / `ListDepotsResult`
 Read the loaded plan's data — **one tool per entity kind**, each returning ONE
 row type (paged, default 30/page, with an optional case-insensitive substring
 filter over id and address). Rows come back in the exact shape the matching
@@ -666,7 +666,7 @@ filter over id and address). Rows come back in the exact shape the matching
 business ids in the rows are the ids every other tool uses; use
 `routing24_list_stops` with a `query` to look ONE stop up.
 ```ts
-// Input for the four `routing24_list_*` tools — one paging/filter shape, and
+// Input for the three `routing24_list_*` tools — one paging/filter shape, and
 // each tool returns ONE row type. (A single list tool taking a `kind` would
 // switch its own result shape, so a caller could not know what it would get
 // back without re-reading the input it had just sent.)
@@ -706,15 +706,6 @@ type ListDepotsResult = {
 };
 ```
 ```ts
-// Result of `routing24_list_addresses` (rows accepted by `routing24_upsert_addresses`).
-type ListAddressesResult = {
-    total: number;  // Rows matching the filter, before paging.
-    offset: number;
-    returned: number;
-    addresses: AddressRow[];
-};
-```
-```ts
 // A vehicle row: the upsert shape plus the resolved depot business ids.
 type VehicleRow = {
     tw_early_s?: number;  // Shift starts, seconds since midnight. Absent = no earliest start.
@@ -743,20 +734,56 @@ type VehicleRow = {
     end_depot_id?: string;
 };
 ```
+
+### `routing24_geocode_addresses` — `GeocodeAddressesInput` → `GeocodeAddressesResult`
+Check up to 10 addresses against the geocoder WITHOUT creating
+anything: no stop, no depot, nothing in the address book. One row comes back
+per input, in order, with its `status` (`geocoded`/`ungeocoded`) and, for
+rows the geocoder resolved, the canonical `matched` text — state it when
+confirming a doubtful address with the user; it carries no precision grade,
+so compare it against the user's own words yourself. A row whose address the
+plan already located comes back `geocoded` with no `matched`. No
+coordinates are returned. This is the whole address surface: an address list
+enters the plan as STOPS (`routing24_upsert_stops` rows with an `id` and the
+address, nothing else), and a checked address sent on with the same text is
+not geocoded again.
 ```ts
-// An address row: the upsert shape plus how many entities reference it.
-type AddressRow = {
-    address: string;
-    area?: string;  // Optional area/city qualifier displayed after the address.
-    status?: "geocoded" | "ungeocoded";  // Whether the row resolved to a map location. Reported on `routing24_list_addresses` rows; accepted and ignored on upsert.
-    usedBySites?: number;
-    usedByDepots?: number;
+// Input for `routing24_geocode_addresses`: 1 to 10 rows per call.
+type GeocodeAddressesInput = {
+    addresses: GeocodeAddressRow[];  // min 1
 };
 ```
+```ts
+// One address to check with `routing24_geocode_addresses`: the same `address`
+// (+ `area`) pair a stop row carries, so a checked row goes on to
+// `routing24_upsert_stops` unchanged, plus an `id`.
+type GeocodeAddressRow = {
+    address: string;  // The whole address as the user gave it, spelling fixed (see `Place.address`).
+    area?: string;  // Optional area/city qualifier; sent to the geocoder with the address.
+};
+```
+```ts
+// Result of `routing24_geocode_addresses`: one row per input, in input order.
+// Nothing was written — no stop, no depot, no address-book row. `matched` is
+// the canonical address the geocoder resolved for rows it resolved on this
+// call (or in this session); state it when confirming a doubtful address with
+// the user. A row whose `address`+`area` pair the plan already located comes
+// back `status: "geocoded"` with no `matched`. No coordinates are returned.
+type GeocodeAddressesResult = {
+    rows: ({ address: string; area?: string; status: "geocoded" | "ungeocoded"; matched?: string })[];
+    addressDiagnostics?: AddressDiagnostics;  // Present only when rows did not resolve, or resolved far from the plan.
+};
+```
+- Rows that did not resolve, or resolved far from the rest of the plan, come
+  with an `addressDiagnostics` block (counts, no rows): correct the text and
+  check again, or ask the user — never create a stop on such a row unasked.
+- The probe is for the few addresses you are unsure you read correctly. A batch
+  of addresses you trust goes straight to `routing24_upsert_stops`, which
+  geocodes internally and reports its own `addressDiagnostics`.
 
-### `routing24_upsert_stops` / `routing24_upsert_vehicles` / `routing24_upsert_depots` / `routing24_upsert_addresses` — `Upsert*Input` → `UpsertResult` (addresses: `UpsertAddressesResult`)
-Create or update entities of the LOADED plan by business `id` (addresses by
-their `address`+`area` pair) — one tool per kind, in the same row shapes the
+### `routing24_upsert_stops` / `routing24_upsert_vehicles` / `routing24_upsert_depots` — `Upsert*Input` → `UpsertResult`
+Create or update entities of the LOADED plan by business `id` — one tool per
+kind, in the same row shapes the
 `routing24_list_*` tools return. An existing id updates that entity in place
 (cross-references stay intact); a new id creates one. The `address` string is
 the ONLY location carrier: new addresses are geocoded internally, rows are
@@ -791,12 +818,6 @@ type UpsertVehiclesInput = {
 // Input for `routing24_upsert_depots`.
 type UpsertDepotsInput = {
     depots: ({ service_duration_s?: number; no_break?: boolean; address?: string; area?: string; id: string; status?: "geocoded" | "ungeocoded"; tw_early_s?: null | number; tw_late_s?: null | number; coordinates?: { lat: number; lng: number } })[];  // min 1
-};
-```
-```ts
-// Input for `routing24_upsert_addresses` (identity is the `address`+`area` pair).
-type UpsertAddressesInput = {
-    addresses: AddressUpsert[];  // min 1
 };
 ```
 ```ts
@@ -854,17 +875,6 @@ type DepotRow = {
 };
 ```
 ```ts
-// One address-book row for `routing24_upsert_addresses` (and the row shape
-// `routing24_list_addresses` returns). The row's identity
-// is the `address` (+ `area`) string pair — upserting the same pair updates
-// the existing row.
-type AddressUpsert = {
-    address: string;
-    area?: string;  // Optional area/city qualifier displayed after the address.
-    status?: "geocoded" | "ungeocoded";  // Whether the row resolved to a map location. Reported on `routing24_list_addresses` rows; accepted and ignored on upsert.
-};
-```
-```ts
 // Result of every `routing24_upsert_*` tool.
 type UpsertResult = {
     applied: boolean;  // False ONLY when nothing was written. A batch where some rows were rejected and the rest landed is `true` — read `rejected` for what did not.
@@ -892,32 +902,6 @@ type UpsertRejection = {
 };
 ```
 ```ts
-// Result of `routing24_upsert_addresses`: the shared upsert counts plus, for
-// SMALL batches only (at most 5 rows — the confirm-with-the-user use), one
-// result per input row. `matched` is the canonical address the geocoder
-// resolved for rows geocoded on this call — state it when confirming a
-// doubtful address with the user; it is transient and never stored. Rows that
-// reused an already-located address book entry come back `status: "geocoded"`
-// with no `matched`. Larger batches return counts and `addressDiagnostics`
-// only. Rejected rows are NOT in `rows` — they are in `rejected`, under the
-// same input index.
-type UpsertAddressesResult = {
-    applied: boolean;  // False ONLY when nothing was written. A batch where some rows were rejected and the rest landed is `true` — read `rejected` for what did not.
-    error?: string;  // Why nothing was written; set only when `applied` is false.
-    added: number;
-    updated: number;
-    skipped: number;  // Rows that were NOT written. `added + updated + skipped` always equals the number of rows you sent.
-    rejected?: UpsertRejection[];  // The skipped rows with the reason each. Capped — see `rejectedOmitted`.
-    rejectedOmitted?: number;  // How many skipped rows `rejected` could not carry because of that cap — so `rejected` is a SAMPLE and every occurrence needs fixing, not just the listed ones. Absent = `rejected` lists all of them.
-    warnings?: string[];  // Values dropped from rows that DID land (an unknown id in a reference list). The row was written without them.
-    geocoded?: number;  // How many entities were geocoded from their address on the way in (rows whose address could not be geocoded are still saved — see `addressDiagnostics`).
-    addressDiagnostics?: AddressDiagnostics;  // Present only when the batch left address problems behind.
-    fleetDiagnostics?: { summary: string; problems: { category: "vehicle_incompatible"; count: number; explanation: string; lever: string }[] };  // Present only when the edit left stops no vehicle can serve.
-    unitsDeclared?: string[];  // Load units this batch DECLARED on the plan (first upsert naming units only), in the plan's unit order.
-    rows?: ({ address: string; row?: number; area?: string; status: "geocoded" | "ungeocoded"; matched?: string })[];
-};
-```
-```ts
 // Address problems the upsert path detected, host-computed (the geocoder and
 // the geo analysis are black boxes — this block is their only agent-visible
 // output). Carries counts and next calls, never the rows themselves: the user
@@ -934,13 +918,10 @@ type AddressDiagnostics = {
   as the whole story — fix every occurrence, not only the listed ones.
 - `warnings` is different from `rejected`: the row DID land, only an
   unresolvable id inside a reference list was dropped from it.
-- `routing24_upsert_addresses` with **at most 5 rows** returns `rows` — one
-  per ACCEPTED input row with its input index, `status` and the canonical
-  `matched` text the geocoder
-  resolved (present only for rows geocoded by this call) — the way to confirm
-  a doubtful address with the user before creating stops on it. Larger
-  batches (hundreds of rows are fine) return counts and
-  `addressDiagnostics` only.
+- An address list enters the plan as stops: `routing24_upsert_stops` rows
+  carrying only an `id` and the `address` (plus `area`). To confirm a
+  doubtful address with the user first, check it with
+  `routing24_geocode_addresses`, which creates nothing.
 - A row whose `address`+`area` pair the plan already resolved reuses that
   stored location — re-sending known addresses never re-geocodes or moves
   them; only NEW or changed address text is geocoded.
@@ -1053,17 +1034,15 @@ type AddressDiagnostics = {
   Planned breaks come back as `type:"break"` stops in `routing24_route`.
   Breaks combine with ride-bounded stops of either kind: see **Shelf life** above.
 
-### `routing24_delete_stops` / `routing24_delete_vehicles` / `routing24_delete_depots` / `routing24_delete_addresses` — `DeleteByIdsInput` → `DeleteResult`
+### `routing24_delete_stops` / `routing24_delete_vehicles` / `routing24_delete_depots` — `DeleteByIdsInput` → `DeleteResult`
 Delete entities of the loaded plan by business id — one tool per kind. Deletes
 CASCADE, and the result's `cascade` says what went with them: deleting a depot
-removes the vehicles referencing it; deleting an address removes the stops and
-depots at it (and then their dependents); deleting a stop drops its address when
-nothing else uses it.
+removes the vehicles referencing it. A deleted stop's or depot's address stays
+in the plan's address book.
 Undoable via routing24_undo (cascaded removals included) — still confirm with the user before deleting anything they did not explicitly list. Ids that match nothing come back in notFound.
 ```ts
-// Input for the four `routing24_delete_*` tools: business ids as returned by
-// the matching `routing24_list_*` (for addresses, the `address` — or
-// `address, area` — string).
+// Input for the three `routing24_delete_*` tools: business ids as returned by
+// the matching `routing24_list_*`.
 type DeleteByIdsInput = {
     ids: string[];  // min 1
 };
@@ -1073,7 +1052,7 @@ type DeleteByIdsInput = {
 type DeleteResult = {
     deleted: number;
     notFound?: string[];  // Ids that matched nothing (nothing was deleted for them).
-    cascade?: string;  // What was removed alongside (deletes cascade: a depot delete removes vehicles referencing it; an address delete removes the depots/stops at it; a stop delete drops its address when nothing else uses it).
+    cascade?: string;  // What was removed alongside (a depot delete removes the vehicles referencing it). A deleted stop's or depot's address stays in the plan's address book.
     fleetDiagnostics?: { summary: string; problems: { category: "vehicle_incompatible"; count: number; explanation: string; lever: string }[] };  // Present only when the delete left stops no vehicle can serve.
 };
 ```
@@ -1134,25 +1113,25 @@ menu. `stops` is the Orders page; `plans` is My Plans.
 ```ts
 // Input for `routing24_open_page`.
 type OpenPageInput = {
-    page: "home" | "plans" | "addresses" | "stops" | "depots" | "vehicles" | "optimize";  // The app page to open ("stops" is the Orders page).
+    page: "home" | "plans" | "stops" | "depots" | "vehicles" | "optimize";  // The app page to open ("stops" is the Orders page).
 };
 ```
 
 ### `routing24_show_on_map` — `ShowOnMapInput` → `ShowOnMapResult`
-Focus one entity on the map: resolves a stop, depot or address-book business
-id to its location, navigates to the entity's page when the current page does
-not show it, and flies the map to it. Modifies nothing.
+Focus one entity on the map: resolves a stop or depot business id to its
+location, navigates to the entity's page when the current page does not show
+it, and flies the map to it. Modifies nothing.
 ```ts
 // Input for `routing24_show_on_map`.
 type ShowOnMapInput = {
-    id: string;  // Business id of a stop, depot, or address-book row.
+    id: string;  // Business id of a stop or depot.
 };
 ```
 ```ts
 // Result of `routing24_show_on_map`.
 type ShowOnMapResult = {
     shown: boolean;
-    kind?: "address" | "depot" | "stop";  // What the id resolved to.
+    kind?: "depot" | "stop";  // What the id resolved to.
     error?: string;
 };
 ```

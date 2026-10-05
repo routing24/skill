@@ -12,15 +12,15 @@ placeholders.
 routing24_get_auth_user();
 
 // 2) Start a fresh plan FIRST — it commits an EMPTY plan (replacing the
-//    loaded one); everything below, saved addresses included, lands in it.
+//    loaded one); everything below lands in it.
 routing24_new_plan({});
 
-// 2b) (Optional) Confirm doubtful addresses — a routing24_upsert_addresses
-//     batch of at most 5 rows returns `rows`, one per input, with status
-//     ('geocoded' | 'ungeocoded') and the canonical `matched` text. Show the
-//     user ungeocoded rows and sanity-check `matched` before optimizing; stop
-//     rows sent later with the SAME address strings reuse these locations.
-routing24_upsert_addresses({
+// 2b) (Optional) Check doubtful addresses — routing24_geocode_addresses takes
+//     at most 10 rows and returns `rows`, one per input, with status
+//     ('geocoded' | 'ungeocoded') and the canonical `matched` text. It creates
+//     nothing. Show the user ungeocoded rows and sanity-check `matched`; stop
+//     rows sent later with the SAME address strings are not geocoded again.
+routing24_geocode_addresses({
     addresses: [{ address: "DEPOT ADDRESS" }, { address: "STOP 1 ADDRESS" }],
 });
 

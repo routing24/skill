@@ -25,7 +25,7 @@ compatibility: >-
   under the user's session.
 metadata:
   author: Routinghub LLC
-  version: "9.2.1"
+  version: "10.0.0"
 ---
 
 # Routing24 route optimizer
@@ -131,8 +131,7 @@ retry the call hoping for a different answer.
    real requests to carry ≥2 stops. Bad input makes a call reject with a
    message naming the offending fields — relay it to the user.
 
-3. **Start a fresh plan.** Everything from here on — confirmed addresses
-   included — lands in this plan:
+3. **Start a fresh plan.** Everything from here on lands in this plan:
    ```
    routing24_new_plan({})   -> { plan_id, ... }
    ```
@@ -140,19 +139,21 @@ retry the call hoping for a different answer.
    `session_id`; over the connector, pin both on every later call so your work
    stays in one lane, as the snippets below do.
 
-4. **Confirm doubtful addresses.** The `routing24_upsert_*` tools geocode every
-   address internally, so pre-resolving is NOT needed. For the few addresses
-   you are unsure you read correctly (a typo you fixed, a part you could not
-   place), save them first with
-   `routing24_upsert_addresses({ addresses: [<those rows>] })`
-   — a batch of **at most 5 rows** returns `rows`, one per input, each with
+4. **Check doubtful addresses, create nothing yet.** The `routing24_upsert_*`
+   tools geocode every address internally, so pre-resolving is NOT needed. For
+   the few addresses you are unsure you read correctly (a typo you fixed, a
+   part you could not place), check them first with
+   `routing24_geocode_addresses({ addresses: [<those rows>] })`
+   — **at most 10 rows** per call; it returns `rows`, one per input, each with
    `status` (`'geocoded' | 'ungeocoded'`) and the canonical `matched` text
-   the geocoder resolved (present only for rows geocoded by this call).
+   the geocoder resolved (present for rows it resolved on this call), and
+   writes nothing to the plan.
    - Show the user any row with `status: 'ungeocoded'` (not found) and ask
-     them to fix the address. Also surface `matched` values that look wrong
-     and confirm.
-   - Then send the stop rows with the SAME address strings — they reuse the
-     locations already resolved, nothing is re-geocoded.
+     them to fix the address. State the `matched` text of the rows that
+     resolved and confirm the ones that look wrong.
+   - Then send the stop rows with the SAME address strings — an address list
+     enters the plan as stops (`id` + `address`); a checked text is not
+     geocoded again.
 
 5. **Create the entities and start optimization.** Build the plan piece by
    piece, then solve it:
@@ -317,7 +318,7 @@ Load these only as the task calls for them (progressive disclosure):
 
 ## Version & keeping current
 
-- This skill is **version 9.2.1**. Its bundled reference
+- This skill is **version 10.0.0**. Its bundled reference
   (`references/api.md` + `references/schema.json`) is generated from Routing24's
   own types and is correct as of this version.
 - The **always-current** copy of the full contract is served at

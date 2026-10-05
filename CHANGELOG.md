@@ -3,6 +3,10 @@
 Version history of the generated `routing24-optimizer` skill content (SKILL.md +
 references/*) and `llms.txt`. Generated; do not edit by hand.
 
+## 10.0.0
+
+BREAKING — the address entity leaves the contract: `routing24_list_addresses`, `routing24_upsert_addresses` and `routing24_delete_addresses` are REMOVED. An address is where a stop or depot is: an address list enters the plan as stops (`routing24_upsert_stops` rows with an `id` and the `address`, nothing else), and deleting is deleting the stop or depot — its address stays in the plan's address book (a deleted stop no longer drops its address either). New: `routing24_geocode_addresses`, a probe that checks up to 10 addresses and returns per-row `status` plus the canonical `matched` text without creating anything — the confirm flow the small `routing24_upsert_addresses` batch used to serve; a checked text sent on to `routing24_upsert_stops` is not geocoded again. Also gone: `addresses` from `routing24_open_page` and the `address` kind of `routing24_show_on_map`. The SQL `addresses` table is unchanged.
+
 ## 9.2.1
 
 The plans table names Google Maps™ with its trademark symbol, matching the app copy. No tool or contract change.

@@ -1743,7 +1743,7 @@
           }
         },
         "required": [],
-        "description": "Input for the four `routing24_list_*` tools — one paging/filter shape, and\neach tool returns ONE row type. (A single list tool taking a `kind` would\nswitch its own result shape, so a caller could not know what it would get\nback without re-reading the input it had just sent.)"
+        "description": "Input for the three `routing24_list_*` tools — one paging/filter shape, and\neach tool returns ONE row type. (A single list tool taking a `kind` would\nswitch its own result shape, so a caller could not know what it would get\nback without re-reading the input it had just sent.)"
       },
       "ListStopsResult": {
         "type": "object",
@@ -2234,67 +2234,6 @@
         ],
         "description": "A depot row: a place plus depot constraints (open window, handling).\nSame conventions as {@link StopRow}: an `address` geocoded internally, a\ncaller-chosen `id`, `tw_early_s`/`tw_late_s` in seconds since midnight and\n`service_duration_s` in seconds. `status` is reported on\n`routing24_list_depots` rows; accepted and ignored on upsert."
       },
-      "ListAddressesResult": {
-        "type": "object",
-        "properties": {
-          "total": {
-            "type": "number",
-            "description": "Rows matching the filter, before paging."
-          },
-          "offset": {
-            "type": "number"
-          },
-          "returned": {
-            "type": "number"
-          },
-          "addresses": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AddressRow"
-            }
-          }
-        },
-        "required": [
-          "total",
-          "offset",
-          "returned",
-          "addresses"
-        ],
-        "description": "Result of `routing24_list_addresses` (rows accepted by `routing24_upsert_addresses`)."
-      },
-      "AddressRow": {
-        "type": "object",
-        "properties": {
-          "address": {
-            "type": "string"
-          },
-          "area": {
-            "type": "string",
-            "description": "Optional area/city qualifier displayed after the address."
-          },
-          "status": {
-            "oneOf": [
-              {
-                "const": "geocoded"
-              },
-              {
-                "const": "ungeocoded"
-              }
-            ],
-            "description": "Whether the row resolved to a map location. Reported on\n`routing24_list_addresses` rows; accepted and ignored on upsert."
-          },
-          "usedBySites": {
-            "type": "number"
-          },
-          "usedByDepots": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "address"
-        ],
-        "description": "An address row: the upsert shape plus how many entities reference it."
-      },
       "UpsertStopsInput": {
         "type": "object",
         "properties": {
@@ -2750,49 +2689,6 @@
         ],
         "description": "One row of `routing24_upsert_vehicles`. The fields\n`routing24_list_vehicles` returns; the optional constraint bounds also take\n`null`, which clears them."
       },
-      "UpsertAddressesInput": {
-        "type": "object",
-        "properties": {
-          "addresses": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AddressUpsert"
-            },
-            "minItems": 1
-          }
-        },
-        "required": [
-          "addresses"
-        ],
-        "description": "Input for `routing24_upsert_addresses` (identity is the `address`+`area` pair)."
-      },
-      "AddressUpsert": {
-        "type": "object",
-        "properties": {
-          "address": {
-            "type": "string"
-          },
-          "area": {
-            "type": "string",
-            "description": "Optional area/city qualifier displayed after the address."
-          },
-          "status": {
-            "oneOf": [
-              {
-                "const": "geocoded"
-              },
-              {
-                "const": "ungeocoded"
-              }
-            ],
-            "description": "Whether the row resolved to a map location. Reported on\n`routing24_list_addresses` rows; accepted and ignored on upsert."
-          }
-        },
-        "required": [
-          "address"
-        ],
-        "description": "One address-book row for `routing24_upsert_addresses` (and the row shape\n`routing24_list_addresses` returns). The row's identity\nis the `address` (+ `area`) string pair — upserting the same pair updates\nthe existing row."
-      },
       "UpsertResult": {
         "type": "object",
         "properties": {
@@ -2974,64 +2870,43 @@
         ],
         "description": "Tag/fleet compatibility problems a data edit left behind, host-computed\nfrom the same predicate the solver applies (required_tags/forbidden_tags\nplus the force-allow/deny overrides). Carries counts and next calls, never\nthe rows: the user sees the affected stops in the app. Absent while the\nplan has no vehicles at all — an empty fleet is a normal intermediate\nstate, not a compatibility problem."
       },
-      "UpsertAddressesResult": {
+      "GeocodeAddressRow": {
         "type": "object",
         "properties": {
-          "applied": {
-            "type": "boolean",
-            "description": "False ONLY when nothing was written. A batch where some rows were\nrejected and the rest landed is `true` — read `rejected` for what did\nnot."
-          },
-          "error": {
+          "address": {
             "type": "string",
-            "description": "Why nothing was written; set only when `applied` is false."
+            "description": "The whole address as the user gave it, spelling fixed (see `Place.address`)."
           },
-          "added": {
-            "type": "number"
-          },
-          "updated": {
-            "type": "number"
-          },
-          "skipped": {
-            "type": "number",
-            "description": "Rows that were NOT written. `added + updated + skipped` always equals\nthe number of rows you sent."
-          },
-          "rejected": {
+          "area": {
+            "type": "string",
+            "description": "Optional area/city qualifier; sent to the geocoder with the address."
+          }
+        },
+        "required": [
+          "address"
+        ],
+        "description": "One address to check with `routing24_geocode_addresses`: the same `address`\n(+ `area`) pair a stop row carries, so a checked row goes on to\n`routing24_upsert_stops` unchanged, plus an `id`."
+      },
+      "GeocodeAddressesInput": {
+        "type": "object",
+        "properties": {
+          "addresses": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/UpsertRejection"
+              "$ref": "#/components/schemas/GeocodeAddressRow"
             },
-            "description": "The skipped rows with the reason each. Capped — see `rejectedOmitted`."
-          },
-          "rejectedOmitted": {
-            "type": "number",
-            "description": "How many skipped rows `rejected` could not carry because of that cap —\nso `rejected` is a SAMPLE and every occurrence needs fixing, not just\nthe listed ones. Absent = `rejected` lists all of them."
-          },
-          "warnings": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Values dropped from rows that DID land (an unknown id in a reference\nlist). The row was written without them."
-          },
-          "geocoded": {
-            "type": "number",
-            "description": "How many entities were geocoded from their address on the way in\n(rows whose address could not be geocoded are still saved — see\n`addressDiagnostics`)."
-          },
-          "addressDiagnostics": {
-            "$ref": "#/components/schemas/AddressDiagnostics",
-            "description": "Present only when the batch left address problems behind."
-          },
-          "fleetDiagnostics": {
-            "$ref": "#/components/schemas/FleetDiagnostics",
-            "description": "Present only when the edit left stops no vehicle can serve."
-          },
-          "unitsDeclared": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Load units this batch DECLARED on the plan (first upsert naming units\nonly), in the plan's unit order."
-          },
+            "minItems": 1,
+            "maxItems": 10
+          }
+        },
+        "required": [
+          "addresses"
+        ],
+        "description": "Input for `routing24_geocode_addresses`: 1 to 10 rows per call."
+      },
+      "GeocodeAddressesResult": {
+        "type": "object",
+        "properties": {
           "rows": {
             "type": "array",
             "items": {
@@ -3039,11 +2914,7 @@
               "properties": {
                 "address": {
                   "type": "string",
-                  "description": "The `address` as sent (the row's identity, with `area`)."
-                },
-                "row": {
-                  "type": "number",
-                  "description": "0-based index of this row in the `addresses` array that was sent."
+                  "description": "The `address` as sent."
                 },
                 "area": {
                   "type": "string"
@@ -3060,7 +2931,7 @@
                 },
                 "matched": {
                   "type": "string",
-                  "description": "Canonical address the geocoder matched, when this call geocoded the row."
+                  "description": "Canonical address the geocoder matched, when this call resolved the row."
                 }
               },
               "required": [
@@ -3068,15 +2939,16 @@
                 "status"
               ]
             }
+          },
+          "addressDiagnostics": {
+            "$ref": "#/components/schemas/AddressDiagnostics",
+            "description": "Present only when rows did not resolve, or resolved far from the plan."
           }
         },
         "required": [
-          "applied",
-          "added",
-          "updated",
-          "skipped"
+          "rows"
         ],
-        "description": "Result of `routing24_upsert_addresses`: the shared upsert counts plus, for\nSMALL batches only (at most 5 rows — the confirm-with-the-user use), one\nresult per input row. `matched` is the canonical address the geocoder\nresolved for rows geocoded on this call — state it when confirming a\ndoubtful address with the user; it is transient and never stored. Rows that\nreused an already-located address book entry come back `status: \"geocoded\"`\nwith no `matched`. Larger batches return counts and `addressDiagnostics`\nonly. Rejected rows are NOT in `rows` — they are in `rejected`, under the\nsame input index."
+        "description": "Result of `routing24_geocode_addresses`: one row per input, in input order.\nNothing was written — no stop, no depot, no address-book row. `matched` is\nthe canonical address the geocoder resolved for rows it resolved on this\ncall (or in this session); state it when confirming a doubtful address with\nthe user. A row whose `address`+`area` pair the plan already located comes\nback `status: \"geocoded\"` with no `matched`. No coordinates are returned."
       },
       "DeleteByIdsInput": {
         "type": "object",
@@ -3092,7 +2964,7 @@
         "required": [
           "ids"
         ],
-        "description": "Input for the four `routing24_delete_*` tools: business ids as returned by\nthe matching `routing24_list_*` (for addresses, the `address` — or\n`address, area` — string)."
+        "description": "Input for the three `routing24_delete_*` tools: business ids as returned by\nthe matching `routing24_list_*`."
       },
       "DeleteResult": {
         "type": "object",
@@ -3109,7 +2981,7 @@
           },
           "cascade": {
             "type": "string",
-            "description": "What was removed alongside (deletes cascade: a depot delete removes\nvehicles referencing it; an address delete removes the depots/stops at\nit; a stop delete drops its address when nothing else uses it)."
+            "description": "What was removed alongside (a depot delete removes the vehicles\nreferencing it). A deleted stop's or depot's address stays in the\nplan's address book."
           },
           "fleetDiagnostics": {
             "$ref": "#/components/schemas/FleetDiagnostics",
@@ -3151,9 +3023,6 @@
                 "const": "plans"
               },
               {
-                "const": "addresses"
-              },
-              {
                 "const": "stops"
               },
               {
@@ -3179,7 +3048,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "description": "Business id of a stop, depot, or address-book row."
+            "description": "Business id of a stop or depot."
           }
         },
         "required": [
@@ -3195,9 +3064,6 @@
           },
           "kind": {
             "oneOf": [
-              {
-                "const": "address"
-              },
               {
                 "const": "depot"
               },
@@ -3866,9 +3732,6 @@
       "$ref": "#/components/schemas/ListDepotsResult"
     },
     {
-      "$ref": "#/components/schemas/ListAddressesResult"
-    },
-    {
       "$ref": "#/components/schemas/UpsertStopsInput"
     },
     {
@@ -3878,13 +3741,16 @@
       "$ref": "#/components/schemas/UpsertVehiclesInput"
     },
     {
-      "$ref": "#/components/schemas/UpsertAddressesInput"
-    },
-    {
       "$ref": "#/components/schemas/UpsertResult"
     },
     {
-      "$ref": "#/components/schemas/UpsertAddressesResult"
+      "$ref": "#/components/schemas/GeocodeAddressRow"
+    },
+    {
+      "$ref": "#/components/schemas/GeocodeAddressesInput"
+    },
+    {
+      "$ref": "#/components/schemas/GeocodeAddressesResult"
     },
     {
       "$ref": "#/components/schemas/DeleteByIdsInput"
