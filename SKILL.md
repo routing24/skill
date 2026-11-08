@@ -85,6 +85,7 @@ table does not name — works on every account.
 | Max distance | PRO | `max_distance` |
 | Max duration | PRO | `max_duration_s` |
 | Max overtime | PRO | `max_overtime_s` |
+| Max stops | PRO | `max_stops` |
 | Max time in vehicle (shelf life) | PRO | `max_time_in_vehicle_s`, `max_ride_overtime_s`, `cost.ride_overtime` |
 | Order sequences | PRO | `sequence_group`, `sequence_rank` |
 | Overtime cost per hour | PRO | `cost.overtime` |
@@ -92,6 +93,7 @@ table does not name — works on every account.
 | Product segregation (load classes) | PRO | `load_class`, `no_mix_load_classes` |
 | Reload depots | PRO | `reload_depots` |
 | Skills (vehicle & order tags) | PRO | `required_tags`, `forbidden_tags`, `tags` |
+| Workload balancing | PRO | `required_count`, `workload_group` |
 
 **What happens on a free account.** Nothing is rejected and nothing is hidden:
 a plan using paid fields solves normally for the first

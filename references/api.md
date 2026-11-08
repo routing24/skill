@@ -72,6 +72,7 @@ type OptimizeStatus = {
     durationHours?: number;
     problemsCount?: number;  // Total constraint-problem markers across all routes (0 = feasible).
     driftFromOptimized?: OptimizedDrift;  // Drift vs the last full optimization (absent while a solve runs).
+    workloadBalance?: { balance: "off" | "duration" | "driving" | "distance" | "stops"; scaled: boolean; unit?: "stops" | "km" | "mi" | "h" | "utilisation"; mean?: number; maxDeviation?: number; tolerance: number; unitCost?: number; balanceCost: number; missingVehiclesCost: number; missingVehicles: number; groups?: { name: string; mean: number; maxDeviation: number; members: number; missing: number; unitCost: number }[]; unusableRequired?: { vehicleId?: string; constraint?: string; usable?: number }[] };  // Workload balancing of the last solve; absent when it was off and no vehicle floor was set.
     error?: string;
     planUuid?: string;  // The plan the call acted on. EXTERNAL (MCP) surface only — the in-app chat drives one loaded plan, so the handler omits it there. A handle in a result reads to a weak model as a handle to pass back: one echoed it into every following call and spent the turn on unknown-field rejections (llm-planuuid-err). No input anywhere takes it.
     complete?: boolean;  // True when the solve ran to completion (not cancelled part-way).
@@ -110,6 +111,9 @@ type RouteBrief = {
     feasible?: boolean;  // True when every constraint on this route is satisfied.
     breakCount?: number;  // Scheduled driver-break stops on this route (they appear in `stops` with type `break`). Absent = none — legitimate when the route's total driving stays under the rule's trigger.
     breakDurationS?: number;  // Total scheduled break time on this route, seconds. Absent = none.
+    workload?: number;  // Workload balancing (plan settings `workload.balance` on): this route's workload in `OptimizeStatus.workloadBalance.unit` (hours for working or driving time, `distanceUnit` for distance, stops; a utilisation fraction, 1 = at the vehicle's limit, under the scaled form) and its deviation from its balance group's mean (negative = below). Absent when balancing was off.
+    workloadDeviation?: number;
+    excessStops?: number;  // Stops over the vehicle's `max_stops` cap. Absent = none.
     problemsCount?: number;  // Constraint-problem markers on this route (0 = feasible); read the problems themselves from `routing24_route`.
 };
 ```
@@ -130,11 +134,11 @@ type SolutionCost = {
 // `quantity` (2-decimal rounding; a force-placed stop on a restricted leg may
 // legitimately price below that — `amount` wins).
 type CostComponent = {
-    kind: "fixed" | "distance" | "duration" | "overtime" | "stop" | "rideOvertime" | "loadDistance" | "other";  // `fixed` per-use vehicle cost; `distance` travel priced per mi/km; `duration` route time priced per hour, EXCLUDING the overtime premium — `overtime` (the surcharge for hours past the regular limit) is its own line, so lines always sum to `total`; `stop` per-visit fees; `rideOvertime` linked orders' ride time inside their overtime band; `loadDistance` carriage (load on board × leg length); `other` unattributed remainder (rare — solutions saved by older app versions).
+    kind: "duration" | "distance" | "fixed" | "overtime" | "stop" | "rideOvertime" | "loadDistance" | "other";  // `fixed` per-use vehicle cost; `distance` travel priced per mi/km; `duration` route time priced per hour, EXCLUDING the overtime premium — `overtime` (the surcharge for hours past the regular limit) is its own line, so lines always sum to `total`; `stop` per-visit fees; `rideOvertime` linked orders' ride time inside their overtime band; `loadDistance` carriage (load on board × leg length); `other` unattributed remainder (rare — solutions saved by older app versions).
     amount: number;  // Money — an addend of the parent `total`. Report this.
     rate?: number;  // Effective per-`unit` rate the solve used (on `routing24_route` costs only) — the authored rate at the engine's fixed-point step (1e-6 per wire unit), rounded to 2 decimals here, so it normally equals the vehicle's configured value. See `defaultRate` before presenting it as configured.
     quantity?: number;  // Billed quantity, in `unit`.
-    unit?: "km" | "mi" | "stop" | "h" | "load-mi" | "load-km";  // Unit of `quantity` (and denominator of `rate`). Distance units are the SOLVE-TIME display unit; `load-mi`/`load-km` = load unit × mile/km.
+    unit?: "km" | "mi" | "h" | "stop" | "load-mi" | "load-km";  // Unit of `quantity` (and denominator of `rate`). Distance units are the SOLVE-TIME display unit; `load-mi`/`load-km` = load unit × mile/km.
     defaultRate?: true;  // The `rate` is an engine DEFAULT — the matching vehicle cost field is blank in the app, the engine supplied the value (see {@link VehicleEffectiveRates}.`defaultRates`). Call it a default; never present it as a cost the user configured.
 };
 ```
@@ -171,7 +175,7 @@ type VehicleEffectiveRates = {
     overtime?: number;
     rideOvertime?: number;
     loadDistance?: number;
-    defaultRates?: ("distance" | "duration" | "overtime")[];  // Rates the ENGINE supplied — the vehicle's matching cost field is blank in the app: `distance` and `duration` when the fleet is unpriced (the defaults of 1 per mile/km and 1 per hour), `overtime` when overtime is allowed but unpriced (priced at the vehicle's hourly rate, else a nominal 1/hour). Call these defaults; never present one as a cost the user configured.
+    defaultRates?: ("duration" | "distance" | "overtime")[];  // Rates the ENGINE supplied — the vehicle's matching cost field is blank in the app: `distance` and `duration` when the fleet is unpriced (the defaults of 1 per mile/km and 1 per hour), `overtime` when overtime is allowed but unpriced (priced at the vehicle's hourly rate, else a nominal 1/hour). Call these defaults; never present one as a cost the user configured.
 };
 ```
 ```ts
@@ -182,8 +186,10 @@ type VehicleEffectiveRates = {
 // lower `objective.total` = better plan. Equivalent hand rule: fewer
 // unassigned wins; ties break on lower `cost.total`.
 type SolverObjective = {
-    total: number;  // cost.total + unassignedPenalty. Comparisons only.
+    total: number;  // cost.total + unassignedPenalty + the workload addends. Comparisons only.
     unassignedPenalty: number;  // Σ synthetic penalties of unassigned orders (incl. alternatives not chosen).
+    workloadBalance?: number;  // Workload balancing addends (absent when balancing was off): the imbalance cost and the idle required vehicles' cost.
+    missingVehicles?: number;
 };
 ```
 ```ts
@@ -304,6 +310,9 @@ type PlanSolutionRoute = {
     stops: PlanSolutionStop[];  // Stops in visit order; bounded by depot stops unless the vehicle's start/finish depot is empty (open-ended).
     breakCount?: number;  // Scheduled driver-break stops on this route (they appear in `stops` with type `break`). Absent = none — legitimate when the route's total driving stays under the rule's trigger.
     breakDurationS?: number;  // Total scheduled break time on this route, seconds. Absent = none.
+    workload?: number;  // Workload balancing (plan settings `workload.balance` on): this route's workload in `OptimizeStatus.workloadBalance.unit` (hours for working or driving time, `distanceUnit` for distance, stops; a utilisation fraction, 1 = at the vehicle's limit, under the scaled form) and its deviation from its balance group's mean (negative = below). Absent when balancing was off.
+    workloadDeviation?: number;
+    excessStops?: number;  // Stops over the vehicle's `max_stops` cap. Absent = none.
 };
 ```
 ```ts
@@ -339,7 +348,7 @@ type RouteCost = {
 ```ts
 // One constraint problem (common.fbs `Problem`).
 type PlanProblem = {
-    type: "max_distance" | "capacity" | "vehicle_incompatible" | "unreachable" | "time_window" | "max_duration" | "depot_time_window" | "shift_window" | "precedence" | "driving_allowance" | "break_schedule" | "break_location" | "sequence" | "incompatible_load_class" | "shelf_life" | "field_not_applicable";
+    type: "max_distance" | "max_stops" | "capacity" | "vehicle_incompatible" | "unreachable" | "time_window" | "max_duration" | "depot_time_window" | "shift_window" | "precedence" | "driving_allowance" | "break_schedule" | "break_location" | "sequence" | "incompatible_load_class" | "shelf_life" | "field_not_applicable";
     amount?: number;  // How far over the constraint (see {@link PlanProblemType} for units).
     dimension?: number;  // Capacity dimension index (`capacity` problems only).
     classes?: string[];  // Conflicting load-class names (`incompatible_load_class` only).
@@ -725,6 +734,9 @@ type VehicleRow = {
     no_mix_load_classes?: { classes: string[] }[];  // PRO: Product segregation (load classes)
     speed_factor?: number;
     approach_curbside?: boolean;
+    required_count?: number;  // PRO: Workload balancing
+    workload_group?: string;  // PRO: Workload balancing
+    max_stops?: number;  // PRO: Max stops
     capacity?: number | { unit: string; value: number }[];  // What one vehicle of this type carries, in the same units as the stops' loads: a bare number, or an array of per-unit entries (`[{"unit": "pallets", "value": 10}, {"unit": "kg", "value": 800}]`) once the plan names units. Absent = unlimited.
     id: string;
     force_allow_sites?: string[];  // PRO: Force allow / deny orders — Stop ids this vehicle type may serve even when tags forbid it — a PERMISSION override, not a reservation: other compatible vehicles can still take the stop. Precedence per vehicle: force_deny_sites beats force_allow_sites beats the tag rule. To make a stop exclusive to one vehicle, use tags (required_tags on the stop + that tag on only this vehicle) or force_deny_sites on every other vehicle.
@@ -1092,6 +1104,61 @@ type PaidFeatureReport = {
 };
 ```
 
+### `routing24_plan_settings` — `PlanSettingsInput` → `PlanSettingsResult`
+Read or change the loaded plan's optimisation settings as ONE object: the
+planner's time budget, the plan-wide "Do not mix" groups (on top of each
+vehicle's own `no_mix_load_classes`), and workload balancing — what to even
+out over the vehicles in use (working time, driving time, distance or stops),
+the Loose / Normal / Strict strength, the fleet floor ("use all my vehicles"
+= `min_vehicles: "all"`), the utilisation form and the prices. No `set`
+reads; `set` is a PATCH (fields omitted keep their values, `null` restores a
+default). A vehicle's own "must work" mark is `required_count` on
+`routing24_upsert_vehicles`. Changes take effect on the next optimization;
+the balance lines come back on `routing24_status.routeStats` (`workload`
+per route) and its cost lines. The undo history does not cover settings.
+```ts
+// Input for `routing24_plan_settings`: no `set` reads; `set` is a PATCH
+// (fields omitted keep their current values).
+type PlanSettingsInput = {
+    set?: PlanSettingsPatch;  // The changes to apply, as a PATCH over the current settings; omit to read them.
+};
+```
+```ts
+type PlanSettingsPatch = {
+    optimization_time?: "auto" | "2x" | "4x" | integer;  // The planner's time budget: `auto` (grows with the stop count), `2x` or `4x` the automatic time, or a number of seconds (1..900).
+    incompatible_load_classes?: null | { classes: string[] }[];  // Plan-wide "Do not mix" groups of stop `load_class` names, on top of each vehicle's own `no_mix_load_classes`: REPLACES the list; `[]` or null clears it.
+    workload?: WorkloadSettingsPatch;  // Fair workload distribution; fields omitted keep their values.
+};
+```
+```ts
+type WorkloadSettingsPatch = {
+    balance?: "off" | "duration" | "driving" | "distance" | "stops";  // What to even out over the vehicles in use: `off` = no balancing (a vehicle's `required_count` floor still applies), `duration` = working time, `driving` = driving time only, `distance`, `stops`.
+    strength?: "loose" | "normal" | "strict";  // How hard the work is evened out: a tenth, a third (default) or nine tenths of the cheapest vehicle's own rate per unit of imbalance beyond the free band.
+    scaled?: boolean;  // Balance each vehicle's share of its own limit for the resource (`max_duration_s` / `period_driving_limit_s` / `max_distance` / `max_stops`) instead of the amount, so a 4 h shift next to 8 h shifts gets half their work; every vehicle then needs that limit.
+    tolerance?: null | number;  // Free band around the average as a fraction, 0..0.99 (default 0.1); null restores the default.
+    unit_cost?: null | number;  // Authored price of one unit of imbalance beyond the band (per hour, km/mi, stop, or 100% of the limit when scaled); null = automatic from the strength and the fleet's own rates (default).
+    missing_vehicle_cost?: null | number;  // Price of a vehicle a floor asks for that stays idle; null = the unassigned-order penalty (default).
+    min_vehicles?: "all" | "none" | integer;  // Fleet floor: `all` = every vehicle of the plan, a number = at least that many, `none` = as many as the plan needs (default). A vehicle's own `required_count` applies regardless.
+};
+```
+```ts
+// Result of `routing24_plan_settings`.
+type PlanSettingsResult = {
+    applied: boolean;  // false = NOTHING changed: `errors` says why (the current settings are returned).
+    errors?: string[];
+    settings: PlanSettingsDoc;
+};
+```
+```ts
+// The plan's optimisation settings as they stand, every default spelled out.
+type PlanSettingsDoc = {
+    optimization_time: "auto" | "2x" | "4x" | number;
+    automatic_time_s: number;  // The automatic time budget for this plan's size, seconds.
+    incompatible_load_classes: { classes: string[] }[];
+    workload: { balance: "off" | "duration" | "driving" | "distance" | "stops"; strength: "loose" | "normal" | "strict"; scaled: boolean; tolerance: number; unit_cost?: number; last_unit_cost?: number; missing_vehicle_cost?: number; min_vehicles: "all" | "none" | number; required_vehicles: number };
+};
+```
+
 ### `routing24_export_excel` → `ExportExcelResult`
 No input. Downloads the loaded plan as an Excel workbook (browser download):
 with an optimized solution, the routes workbook (Route stops, Route stats,
@@ -1113,7 +1180,7 @@ menu. `stops` is the Orders page; `plans` is My Plans.
 ```ts
 // Input for `routing24_open_page`.
 type OpenPageInput = {
-    page: "home" | "plans" | "stops" | "depots" | "vehicles" | "optimize";  // The app page to open ("stops" is the Orders page).
+    page: "stops" | "home" | "plans" | "depots" | "vehicles" | "optimize";  // The app page to open ("stops" is the Orders page).
 };
 ```
 
