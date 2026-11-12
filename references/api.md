@@ -1,6 +1,6 @@
 # Routing24 route optimizer — API reference
 
-> Generated from Routing24's own types (skill version 10.0.0). The
+> Generated from Routing24's own types (skill version 10.1.0). The
 > always-current copy is served at https://routing24.com/llms.txt.
 
 The `routing24_*` tools, one section per tool. The shapes are the same
@@ -50,8 +50,9 @@ The optimization snapshot AND the solution overview for the
 currently-loaded plan (whether you just optimized it or opened it via its URL):
 the rollups, economic `cost`/`objective`, `driftFromOptimized`, and
 `routeStats` — one COMPACT entry per route (vehicle, stop count, distance,
-duration, feasibility, cost; **no** stop list). Poll by looping on routing24_status until phase is 'done' or 'error': while a solve runs each call holds its reply up to ~15s (returning early when the solve lands), so call it back-to-back — no sleep between calls is needed.
-`phase` walks `idle → geocoding → matrix → solving → saving → done` (or `error`). `rev`/`lastEditBy`
+duration, feasibility, cost; **no** stop list). Poll by looping on routing24_status until phase is "done", "interrupted" or "error": while a solve runs each call holds its reply up to ~15s (returning early when the solve lands), so call it back-to-back — no sleep between calls is needed.
+`phase` walks `idle → geocoding → matrix → solving → saving → done` (or ends on `interrupted` after a
+cancel, or on `error`). `rev`/`lastEditBy`
 report the last plan change and who made it; the optional `since_rev` input
 holds the reply until the plan changes again — the cheap way to watch a plan
 someone else (the user or another assistant) is editing. Drill into a
@@ -59,7 +60,7 @@ single route's ordered stops with `routing24_route`, and read what's unserved
 with `routing24_unassigned`.
 ```ts
 type OptimizeStatus = {
-    phase: "idle" | "geocoding" | "matrix" | "solving" | "saving" | "done" | "error";
+    phase: "idle" | "geocoding" | "matrix" | "solving" | "saving" | "done" | "interrupted" | "error";
     running: boolean;
     progress?: number;  // 0..1 while solving, when available.
     feasible?: boolean;
@@ -72,10 +73,10 @@ type OptimizeStatus = {
     durationHours?: number;
     problemsCount?: number;  // Total constraint-problem markers across all routes (0 = feasible).
     driftFromOptimized?: OptimizedDrift;  // Drift vs the last full optimization (absent while a solve runs).
-    workloadBalance?: { balance: "off" | "duration" | "driving" | "distance" | "stops"; scaled: boolean; unit?: "stops" | "km" | "mi" | "h" | "utilisation"; mean?: number; maxDeviation?: number; tolerance: number; unitCost?: number; balanceCost: number; missingVehiclesCost: number; missingVehicles: number; groups?: { name: string; mean: number; maxDeviation: number; members: number; missing: number; unitCost: number }[]; unusableRequired?: { vehicleId?: string; constraint?: string; usable?: number }[] };  // Workload balancing of the last solve; absent when it was off and no vehicle floor was set.
+    workloadBalance?: { balance: "off" | "duration" | "driving" | "distance" | "stops" | "groups"; scaled: boolean; unit?: "stops" | "km" | "mi" | "h" | "utilisation"; mean?: number; maxDeviation?: number; tolerance?: number; unitCost?: number; balanceCost: number; unassignedVehiclesCost: number; unassignedVehicles: number; groups?: ({ name: string; balance: "duration" | "driving" | "distance" | "stops"; scaled: boolean; unit: "stops" | "km" | "mi" | "h" | "utilisation"; mean: number; maxDeviation: number; members: number; unassigned: number; unitCost: number })[]; unusableRequired?: { vehicleId: string; constraint?: string }[] };  // Route balancing of the last solve; absent when it was off and no vehicle floor was set.
     error?: string;
     planUuid?: string;  // The plan the call acted on. EXTERNAL (MCP) surface only — the in-app chat drives one loaded plan, so the handler omits it there. A handle in a result reads to a weak model as a handle to pass back: one echoed it into every following call and spent the turn on unknown-field rejections (llm-planuuid-err). No input anywhere takes it.
-    complete?: boolean;  // True when the solve ran to completion (not cancelled part-way).
+    complete?: boolean;  // True when the solution leaves no required stop unassigned. Whether the optimization ran to its end is `phase`.
     cost?: SolutionCost;  // Economic cost (money) of the whole plan. Coverage is `unassignedCount`, never a cost. Absent on pre-feature solutions.
     objective?: SolverObjective;  // Solver comparison scalar — see {@link SolverObjective}; never money.
     costModel?: CostModel;  // The per-unit pricing this solve used, fallbacks included — see {@link CostModel}. Absent mid-solve and on pre-feature solutions.
@@ -111,8 +112,9 @@ type RouteBrief = {
     feasible?: boolean;  // True when every constraint on this route is satisfied.
     breakCount?: number;  // Scheduled driver-break stops on this route (they appear in `stops` with type `break`). Absent = none — legitimate when the route's total driving stays under the rule's trigger.
     breakDurationS?: number;  // Total scheduled break time on this route, seconds. Absent = none.
-    workload?: number;  // Workload balancing (plan settings `workload.balance` on): this route's workload in `OptimizeStatus.workloadBalance.unit` (hours for working or driving time, `distanceUnit` for distance, stops; a utilisation fraction, 1 = at the vehicle's limit, under the scaled form) and its deviation from its balance group's mean (negative = below). Absent when balancing was off.
+    workload?: number;  // Route balancing: this route's workload in `OptimizeStatus.workloadBalance.unit` (hours for working or driving time, `distanceUnit` for distance, stops; a utilisation fraction, 1 = at the vehicle's limit, under the scaled form) and its deviation from the mean it was balanced against (negative = below). Absent when the route was not balanced.
     workloadDeviation?: number;
+    workloadGroup?: string;  // Balancing per balance group (`workloadBalance.balance: "groups"`): the group this route was balanced in. `workload` is then in the unit of that entry of `workloadBalance.groups`.
     excessStops?: number;  // Stops over the vehicle's `max_stops` cap. Absent = none.
     problemsCount?: number;  // Constraint-problem markers on this route (0 = feasible); read the problems themselves from `routing24_route`.
 };
@@ -188,8 +190,8 @@ type VehicleEffectiveRates = {
 type SolverObjective = {
     total: number;  // cost.total + unassignedPenalty + the workload addends. Comparisons only.
     unassignedPenalty: number;  // Σ synthetic penalties of unassigned orders (incl. alternatives not chosen).
-    workloadBalance?: number;  // Workload balancing addends (absent when balancing was off): the imbalance cost and the idle required vehicles' cost.
-    missingVehicles?: number;
+    workloadBalance?: number;  // Route balancing addends (absent when balancing was off): the imbalance cost and the idle required vehicles' cost.
+    unassignedVehicles?: number;
 };
 ```
 ```ts
@@ -213,7 +215,7 @@ type OptimizedDrift = {
     costPct?: number;  // Cost change vs the baseline, percent (+ = more expensive).
     problems: number;  // New problem markers vs the baseline (+ = worse).
     unassigned: number;  // Newly unassigned stops vs the baseline (+ = worse).
-    severity: "improved" | "neutral" | "degraded" | "severe";  // Fixed-threshold verdict: any new problem/unassigned ⇒ at least `degraded`; cost, distance or duration > +5% ⇒ `degraded`, > +15% ⇒ `severe`; everything ≤ baseline with a ≥1% gain ⇒ `improved`; else `neutral`.
+    severity: "improved" | "neutral" | "degraded" | "severe";  // Fixed-threshold verdict, coverage before money: any new problem/unassigned ⇒ at least `degraded`; else fewer of either ⇒ `improved`; else cost decides: > +5% ⇒ `degraded`, > +15% ⇒ `severe`, a ≥1% gain ⇒ `improved`, otherwise `neutral`. Distance and duration decide in place of cost only when the plan has none.
     summary: string;  // One ready-to-quote sentence, lexicographic: coverage first, then money.
 };
 ```
@@ -310,8 +312,9 @@ type PlanSolutionRoute = {
     stops: PlanSolutionStop[];  // Stops in visit order; bounded by depot stops unless the vehicle's start/finish depot is empty (open-ended).
     breakCount?: number;  // Scheduled driver-break stops on this route (they appear in `stops` with type `break`). Absent = none — legitimate when the route's total driving stays under the rule's trigger.
     breakDurationS?: number;  // Total scheduled break time on this route, seconds. Absent = none.
-    workload?: number;  // Workload balancing (plan settings `workload.balance` on): this route's workload in `OptimizeStatus.workloadBalance.unit` (hours for working or driving time, `distanceUnit` for distance, stops; a utilisation fraction, 1 = at the vehicle's limit, under the scaled form) and its deviation from its balance group's mean (negative = below). Absent when balancing was off.
+    workload?: number;  // Route balancing: this route's workload in `OptimizeStatus.workloadBalance.unit` (hours for working or driving time, `distanceUnit` for distance, stops; a utilisation fraction, 1 = at the vehicle's limit, under the scaled form) and its deviation from the mean it was balanced against (negative = below). Absent when the route was not balanced.
     workloadDeviation?: number;
+    workloadGroup?: string;  // Balancing per balance group (`workloadBalance.balance: "groups"`): the group this route was balanced in. `workload` is then in the unit of that entry of `workloadBalance.groups`.
     excessStops?: number;  // Stops over the vehicle's `max_stops` cap. Absent = none.
 };
 ```
@@ -734,8 +737,9 @@ type VehicleRow = {
     no_mix_load_classes?: { classes: string[] }[];  // PRO: Product segregation (load classes)
     speed_factor?: number;
     approach_curbside?: boolean;
-    required_count?: number;  // PRO: Workload balancing
-    workload_group?: string;  // PRO: Workload balancing
+    required?: boolean;  // PRO: Route balancing
+    required_count?: number;  // PRO: Route balancing
+    workload_group?: string;  // PRO: Route balancing
     max_stops?: number;  // PRO: Max stops
     capacity?: number | { unit: string; value: number }[];  // What one vehicle of this type carries, in the same units as the stops' loads: a bare number, or an array of per-unit entries (`[{"unit": "pallets", "value": 10}, {"unit": "kg", "value": 800}]`) once the plan names units. Absent = unlimited.
     id: string;
@@ -1107,13 +1111,18 @@ type PaidFeatureReport = {
 ### `routing24_plan_settings` — `PlanSettingsInput` → `PlanSettingsResult`
 Read or change the loaded plan's optimisation settings as ONE object: the
 planner's time budget, the plan-wide "Do not mix" groups (on top of each
-vehicle's own `no_mix_load_classes`), and workload balancing — what to even
+vehicle's own `no_mix_load_classes`), and route balancing — what to even
 out over the vehicles in use (working time, driving time, distance or stops),
-the Loose / Normal / Strict strength, the fleet floor ("use all my vehicles"
-= `min_vehicles: "all"`), the utilisation form and the prices. No `set`
-reads; `set` is a PATCH (fields omitted keep their values, `null` restores a
-default). A vehicle's own "must work" mark is `required_count` on
-`routing24_upsert_vehicles`. Changes take effect on the next optimization;
+the Loose / Normal / Strict strength, "use all my vehicles"
+(`require_all_vehicles: true`), the utilisation form and the price. Balancing
+is one setting for every vehicle (`workload`: all of them balanced with each
+other) or one per balance group (`workload_groups`: each entry balances the
+vehicles whose `workload_group` is its `name`, with its own measure and
+strength, and a vehicle in no listed group is not balanced), never both. No
+`set` reads; `set` is a PATCH (fields omitted keep their values, `null`
+restores a default; `workload_groups` is patched by `name`). A vehicle type's
+"Required" / "Required count" is `required` /
+`required_count` on `routing24_upsert_vehicles`. Changes take effect on the next optimization;
 the balance lines come back on `routing24_status.routeStats` (`workload`
 per route) and its cost lines. The undo history does not cover settings.
 ```ts
@@ -1125,20 +1134,31 @@ type PlanSettingsInput = {
 ```
 ```ts
 type PlanSettingsPatch = {
+    require_all_vehicles?: boolean;  // "Require all vehicles": every vehicle of the plan gets a route (default false: as many as the plan needs). A vehicle's own `required` / `required_count` applies regardless.
     optimization_time?: "auto" | "2x" | "4x" | integer;  // The planner's time budget: `auto` (grows with the stop count), `2x` or `4x` the automatic time, or a number of seconds (1..900).
     incompatible_load_classes?: null | { classes: string[] }[];  // Plan-wide "Do not mix" groups of stop `load_class` names, on top of each vehicle's own `no_mix_load_classes`: REPLACES the list; `[]` or null clears it.
-    workload?: WorkloadSettingsPatch;  // Fair workload distribution; fields omitted keep their values.
+    workload?: WorkloadSettingsPatch;  // Route balancing with ONE setting for every vehicle: all of them are balanced with each other, whatever their `workload_group`. Fields omitted keep their values. Not together with `workload_groups`.
+    workload_groups?: null | WorkloadGroupPatch[];  // Route balancing PER BALANCE GROUP, instead of `workload`: each entry balances the vehicles whose `workload_group` is its `name` among themselves, with its own measure, strength and prices. A vehicle in no listed group is NOT balanced. PATCH by `name`: entries not sent keep their settings, `balance: "off"` removes a group's balancing, null clears every group. With `workload` balancing every vehicle, send `workload: {balance: "off"}` in the same call.
 };
 ```
 ```ts
 type WorkloadSettingsPatch = {
-    balance?: "off" | "duration" | "driving" | "distance" | "stops";  // What to even out over the vehicles in use: `off` = no balancing (a vehicle's `required_count` floor still applies), `duration` = working time, `driving` = driving time only, `distance`, `stops`.
+    balance?: "off" | "duration" | "driving" | "distance" | "stops";  // What to even out over the vehicles in use: `off` = no balancing (a vehicle's `required` / `required_count` floor still applies), `duration` = working time, `driving` = driving time only, `distance`, `stops`.
     strength?: "loose" | "normal" | "strict";  // How hard the work is evened out: a tenth, a third (default) or nine tenths of the cheapest vehicle's own rate per unit of imbalance beyond the free band.
     scaled?: boolean;  // Balance each vehicle's share of its own limit for the resource (`max_duration_s` / `period_driving_limit_s` / `max_distance` / `max_stops`) instead of the amount, so a 4 h shift next to 8 h shifts gets half their work; every vehicle then needs that limit.
     tolerance?: null | number;  // Free band around the average as a fraction, 0..0.99 (default 0.1); null restores the default.
     unit_cost?: null | number;  // Authored price of one unit of imbalance beyond the band (per hour, km/mi, stop, or 100% of the limit when scaled); null = automatic from the strength and the fleet's own rates (default).
-    missing_vehicle_cost?: null | number;  // Price of a vehicle a floor asks for that stays idle; null = the unassigned-order penalty (default).
-    min_vehicles?: "all" | "none" | integer;  // Fleet floor: `all` = every vehicle of the plan, a number = at least that many, `none` = as many as the plan needs (default). A vehicle's own `required_count` applies regardless.
+};
+```
+```ts
+// One balance group's balancing, patched by `name`.
+type WorkloadGroupPatch = {
+    balance?: "off" | "duration" | "driving" | "distance" | "stops";  // What to even out over the vehicles in use: `off` = no balancing (a vehicle's `required` / `required_count` floor still applies), `duration` = working time, `driving` = driving time only, `distance`, `stops`.
+    strength?: "loose" | "normal" | "strict";  // How hard the work is evened out: a tenth, a third (default) or nine tenths of the cheapest vehicle's own rate per unit of imbalance beyond the free band.
+    scaled?: boolean;  // Balance each vehicle's share of its own limit for the resource (`max_duration_s` / `period_driving_limit_s` / `max_distance` / `max_stops`) instead of the amount, so a 4 h shift next to 8 h shifts gets half their work; every vehicle then needs that limit.
+    tolerance?: null | number;  // Free band around the average as a fraction, 0..0.99 (default 0.1); null restores the default.
+    unit_cost?: null | number;  // Authored price of one unit of imbalance beyond the band (per hour, km/mi, stop, or 100% of the limit when scaled); null = automatic from the strength and the fleet's own rates (default).
+    name: string;  // The balance group: the `workload_group` its vehicles carry (routing24_upsert_vehicles), matched exactly.
 };
 ```
 ```ts
@@ -1147,6 +1167,7 @@ type PlanSettingsResult = {
     applied: boolean;  // false = NOTHING changed: `errors` says why (the current settings are returned).
     errors?: string[];
     settings: PlanSettingsDoc;
+    next?: string;  // After an applied `set`: what happens next.
 };
 ```
 ```ts
@@ -1155,7 +1176,33 @@ type PlanSettingsDoc = {
     optimization_time: "auto" | "2x" | "4x" | number;
     automatic_time_s: number;  // The automatic time budget for this plan's size, seconds.
     incompatible_load_classes: { classes: string[] }[];
-    workload: { balance: "off" | "duration" | "driving" | "distance" | "stops"; strength: "loose" | "normal" | "strict"; scaled: boolean; tolerance: number; unit_cost?: number; last_unit_cost?: number; missing_vehicle_cost?: number; min_vehicles: "all" | "none" | number; required_vehicles: number };
+    require_all_vehicles: boolean;
+    required_vehicles: number;  // Vehicles the fleet's `required` / `required_count` floors ask for in total (every vehicle under `require_all_vehicles`).
+    workload: WorkloadSettingsDoc;  // The one setting that balances every vehicle with every other; `balance: "off"` while `workload_groups` balances per group.
+    workload_groups: WorkloadGroupDoc[];  // Balancing per balance group: one entry per group that balances. Empty = not balancing per group. While it has entries, a vehicle in no listed group is not balanced.
+    vehicle_workload_groups: string[];  // The `workload_group` names the plan's vehicles carry: the groups `workload_groups` can balance.
+};
+```
+```ts
+type WorkloadSettingsDoc = {
+    balance: "off" | "duration" | "driving" | "distance" | "stops";
+    strength: "loose" | "normal" | "strict";
+    scaled: boolean;
+    tolerance: number;
+    unit_cost?: number;  // Authored price; absent = automatic.
+    last_unit_cost?: number;  // The price the last optimization used per unit of imbalance, when it balanced the same resource in the same form (absent otherwise).
+};
+```
+```ts
+type WorkloadGroupDoc = {
+    balance: "off" | "duration" | "driving" | "distance" | "stops";
+    strength: "loose" | "normal" | "strict";
+    scaled: boolean;
+    tolerance: number;
+    unit_cost?: number;  // Authored price; absent = automatic.
+    last_unit_cost?: number;  // The price the last optimization used per unit of imbalance, when it balanced the same resource in the same form (absent otherwise).
+    name: string;  // The balance group: the `workload_group` of its vehicles.
+    vehicles: number;  // How many vehicles carry the name (`available_count` counted).
 };
 ```
 

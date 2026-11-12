@@ -149,7 +149,7 @@
           },
           "workloadBalance": {
             "$ref": "#/components/schemas/WorkloadBalanceReport",
-            "description": "Workload balancing of the last solve; absent when it was off and no\nvehicle floor was set."
+            "description": "Route balancing of the last solve; absent when it was off and no\nvehicle floor was set."
           },
           "error": {
             "type": "string"
@@ -160,7 +160,7 @@
           },
           "complete": {
             "type": "boolean",
-            "description": "True when the solve ran to completion (not cancelled part-way)."
+            "description": "True when the solution leaves no required stop unassigned. Whether\nthe optimization ran to its end is `phase`."
           },
           "cost": {
             "$ref": "#/components/schemas/SolutionCost",
@@ -235,9 +235,13 @@
             "const": "done"
           },
           {
+            "const": "interrupted"
+          },
+          {
             "const": "error"
           }
-        ]
+        ],
+        "description": "Where the optimization stands, whoever started it (routing24_reoptimize_plan\nor the user in the app). `done` = it ran to its end. `interrupted` = it was\ncancelled before its end (routing24_cancel or the user): the plan holds the\nbest solution found until then, if any. `error` = it failed (see `error`)."
       },
       "OptimizedDrift": {
         "type": "object",
@@ -293,7 +297,7 @@
                 "const": "severe"
               }
             ],
-            "description": "Fixed-threshold verdict: any new problem/unassigned ⇒ at least\n`degraded`; cost, distance or duration > +5% ⇒ `degraded`, > +15% ⇒\n`severe`; everything ≤ baseline with a ≥1% gain ⇒ `improved`; else\n`neutral`."
+            "description": "Fixed-threshold verdict, coverage before money: any new\nproblem/unassigned ⇒ at least `degraded`; else fewer of either ⇒\n`improved`; else cost decides: > +5% ⇒ `degraded`, > +15% ⇒ `severe`,\na ≥1% gain ⇒ `improved`, otherwise `neutral`. Distance and duration\ndecide in place of cost only when the plan has none."
           },
           "summary": {
             "type": "string",
@@ -332,13 +336,16 @@
               },
               {
                 "const": "stops"
+              },
+              {
+                "const": "groups"
               }
             ],
-            "description": "`off` = no balanced resource (only a vehicle floor was set)."
+            "description": "`off` = no balanced resource (only a vehicle floor was set). `groups`\n= balanced per balance group (plan settings `workload_groups`): the\nresource, the unit and the figures are on each entry of `groups`."
           },
           "scaled": {
             "type": "boolean",
-            "description": "Utilisation form: workloads are fractions of each vehicle's own limit."
+            "description": "Utilisation form: workloads are fractions of each vehicle's own limit\n(per group under `groups`)."
           },
           "unit": {
             "oneOf": [
@@ -362,14 +369,14 @@
           },
           "mean": {
             "type": "number",
-            "description": "The fleet-wide mean workload and the largest deviation from a group mean."
+            "description": "The mean workload over every balanced vehicle and the largest\ndeviation from it. Absent under `groups`."
           },
           "maxDeviation": {
             "type": "number"
           },
           "tolerance": {
             "type": "number",
-            "description": "Free band half-width as a fraction of the mean."
+            "description": "Free band half-width as a fraction of the mean. Absent under `groups`."
           },
           "unitCost": {
             "type": "number",
@@ -379,10 +386,10 @@
             "type": "number",
             "description": "Objective addends, solver units: the imbalance cost over every route\nand the idle required vehicles' cost."
           },
-          "missingVehiclesCost": {
+          "unassignedVehiclesCost": {
             "type": "number"
           },
-          "missingVehicles": {
+          "unassignedVehicles": {
             "type": "number",
             "description": "Vehicles the floors asked for that stayed idle."
           },
@@ -391,32 +398,72 @@
             "items": {
               "$ref": "#/components/schemas/WorkloadGroupReport"
             },
-            "description": "Per balance group, only when vehicles name a `workload_group`."
+            "description": "Under `balance: \"groups\"`: one entry per balance group that balanced\nand had a vehicle in use or required. A vehicle in no listed group\nwas not balanced, and its routes carry no `workload`."
           },
           "unusableRequired": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/UnusableRequiredVehicle"
             },
-            "description": "Required vehicles the planner could not use: no order fits them, so\ntheir floor was ignored (the plan still solved). `constraint` = the\nrule that blocked the most orders; a row without `vehicleId` is the\nfleet floor, lowered to `usable`."
+            "description": "Required vehicles the planner could not use: no order fits them, so\ntheir floor was ignored (the plan still solved). `constraint` = the\nrule that blocked the most orders."
           }
         },
         "required": [
           "balance",
           "scaled",
-          "tolerance",
           "balanceCost",
-          "missingVehiclesCost",
-          "missingVehicles"
+          "unassignedVehiclesCost",
+          "unassignedVehicles"
         ],
-        "description": "Workload balancing as the last solve ran it (plan settings `workload`,\nrouting24_plan_settings): the resource and form, the figures in the\nbalanced unit, the two objective addends (NOT money, not in `cost.total`)\nand the floors' outcome."
+        "description": "Route balancing as the last solve ran it (plan settings `workload` or\n`workload_groups`, routing24_plan_settings): the resource and form, the\nfigures in the balanced unit, the two objective addends (NOT money, not in\n`cost.total`) and the floors' outcome."
       },
       "WorkloadGroupReport": {
         "type": "object",
         "properties": {
           "name": {
             "type": "string",
-            "description": "`\"\"` is the whole-fleet group."
+            "description": "The balance group: the `workload_group` of its vehicles."
+          },
+          "balance": {
+            "oneOf": [
+              {
+                "const": "duration"
+              },
+              {
+                "const": "driving"
+              },
+              {
+                "const": "distance"
+              },
+              {
+                "const": "stops"
+              }
+            ],
+            "description": "What the group balanced."
+          },
+          "scaled": {
+            "type": "boolean",
+            "description": "Utilisation form: workloads are fractions of each vehicle's own limit."
+          },
+          "unit": {
+            "oneOf": [
+              {
+                "const": "stops"
+              },
+              {
+                "const": "km"
+              },
+              {
+                "const": "mi"
+              },
+              {
+                "const": "h"
+              },
+              {
+                "const": "utilisation"
+              }
+            ],
+            "description": "Unit of `mean`, `maxDeviation` and the workload of the group's routes."
           },
           "mean": {
             "type": "number"
@@ -426,21 +473,25 @@
           },
           "members": {
             "type": "number",
-            "description": "Used routes plus missing vehicles."
+            "description": "Used routes plus unassigned required vehicles."
           },
-          "missing": {
+          "unassigned": {
             "type": "number"
           },
           "unitCost": {
-            "type": "number"
+            "type": "number",
+            "description": "The price one unit of imbalance beyond the band was charged at, per `unit`."
           }
         },
         "required": [
           "name",
+          "balance",
+          "scaled",
+          "unit",
           "mean",
           "maxDeviation",
           "members",
-          "missing",
+          "unassigned",
           "unitCost"
         ]
       },
@@ -453,13 +504,11 @@
           "constraint": {
             "type": "string",
             "description": "The blocking rule (PlanProblemType vocabulary), when one dominates."
-          },
-          "usable": {
-            "type": "number",
-            "description": "Fleet-floor case: how many vehicles can serve an order."
           }
         },
-        "required": []
+        "required": [
+          "vehicleId"
+        ]
       },
       "SolutionCost": {
         "type": "object",
@@ -573,9 +622,9 @@
           },
           "workloadBalance": {
             "type": "number",
-            "description": "Workload balancing addends (absent when balancing was off): the\nimbalance cost and the idle required vehicles' cost."
+            "description": "Route balancing addends (absent when balancing was off): the\nimbalance cost and the idle required vehicles' cost."
           },
-          "missingVehicles": {
+          "unassignedVehicles": {
             "type": "number"
           }
         },
@@ -712,10 +761,14 @@
           },
           "workload": {
             "type": "number",
-            "description": "Workload balancing (plan settings `workload.balance` on): this route's\nworkload in `OptimizeStatus.workloadBalance.unit` (hours for working\nor driving time, `distanceUnit` for distance, stops; a utilisation\nfraction, 1 = at the vehicle's limit, under the scaled form) and its\ndeviation from its balance group's mean (negative = below). Absent\nwhen balancing was off."
+            "description": "Route balancing: this route's workload in\n`OptimizeStatus.workloadBalance.unit` (hours for working or driving\ntime, `distanceUnit` for distance, stops; a utilisation fraction, 1 =\nat the vehicle's limit, under the scaled form) and its deviation from\nthe mean it was balanced against (negative = below). Absent when the\nroute was not balanced."
           },
           "workloadDeviation": {
             "type": "number"
+          },
+          "workloadGroup": {
+            "type": "string",
+            "description": "Balancing per balance group (`workloadBalance.balance: \"groups\"`):\nthe group this route was balanced in. `workload` is then in the unit\nof that entry of `workloadBalance.groups`."
           },
           "excessStops": {
             "type": "number",
@@ -876,10 +929,14 @@
           },
           "workload": {
             "type": "number",
-            "description": "Workload balancing (plan settings `workload.balance` on): this route's\nworkload in `OptimizeStatus.workloadBalance.unit` (hours for working\nor driving time, `distanceUnit` for distance, stops; a utilisation\nfraction, 1 = at the vehicle's limit, under the scaled form) and its\ndeviation from its balance group's mean (negative = below). Absent\nwhen balancing was off."
+            "description": "Route balancing: this route's workload in\n`OptimizeStatus.workloadBalance.unit` (hours for working or driving\ntime, `distanceUnit` for distance, stops; a utilisation fraction, 1 =\nat the vehicle's limit, under the scaled form) and its deviation from\nthe mean it was balanced against (negative = below). Absent when the\nroute was not balanced."
           },
           "workloadDeviation": {
             "type": "number"
+          },
+          "workloadGroup": {
+            "type": "string",
+            "description": "Balancing per balance group (`workloadBalance.balance: \"groups\"`):\nthe group this route was balanced in. `workload` is then in the unit\nof that entry of `workloadBalance.groups`."
           },
           "excessStops": {
             "type": "number",
@@ -2202,6 +2259,9 @@
           "approach_curbside": {
             "type": "boolean"
           },
+          "required": {
+            "type": "boolean"
+          },
           "required_count": {
             "type": "number"
           },
@@ -2774,6 +2834,9 @@
           "approach_curbside": {
             "type": "boolean"
           },
+          "required": {
+            "type": "boolean"
+          },
           "required_count": {
             "type": "number"
           },
@@ -3227,6 +3290,10 @@
       "PlanSettingsPatch": {
         "type": "object",
         "properties": {
+          "require_all_vehicles": {
+            "type": "boolean",
+            "description": "\"Require all vehicles\": every vehicle of the plan gets a route (default\nfalse: as many as the plan needs). A vehicle's own `required` /\n`required_count` applies regardless."
+          },
           "optimization_time": {
             "oneOf": [
               {
@@ -3262,7 +3329,21 @@
           },
           "workload": {
             "$ref": "#/components/schemas/WorkloadSettingsPatch",
-            "description": "Fair workload distribution; fields omitted keep their values."
+            "description": "Route balancing with ONE setting for every vehicle: all of them are\nbalanced with each other, whatever their `workload_group`. Fields\nomitted keep their values. Not together with `workload_groups`."
+          },
+          "workload_groups": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/WorkloadGroupPatch"
+                }
+              }
+            ],
+            "description": "Route balancing PER BALANCE GROUP, instead of `workload`: each entry\nbalances the vehicles whose `workload_group` is its `name` among\nthemselves, with its own measure, strength and prices. A vehicle in\nno listed group is NOT balanced. PATCH by `name`: entries not sent\nkeep their settings, `balance: \"off\"` removes a group's balancing,\nnull clears every group. With `workload` balancing every vehicle,\nsend `workload: {balance: \"off\"}` in the same call."
           }
         },
         "required": []
@@ -3288,7 +3369,76 @@
                 "const": "stops"
               }
             ],
-            "description": "What to even out over the vehicles in use: `off` = no balancing (a\nvehicle's `required_count` floor still applies), `duration` = working\ntime, `driving` = driving time only, `distance`, `stops`."
+            "description": "What to even out over the vehicles in use: `off` = no balancing (a\nvehicle's `required` / `required_count` floor still applies), `duration` = working\ntime, `driving` = driving time only, `distance`, `stops`."
+          },
+          "strength": {
+            "oneOf": [
+              {
+                "const": "loose"
+              },
+              {
+                "const": "normal"
+              },
+              {
+                "const": "strict"
+              }
+            ],
+            "description": "How hard the work is evened out: a tenth, a third (default) or nine\ntenths of the cheapest vehicle's own rate per unit of imbalance beyond\nthe free band."
+          },
+          "scaled": {
+            "type": "boolean",
+            "description": "Balance each vehicle's share of its own limit for the resource\n(`max_duration_s` / `period_driving_limit_s` / `max_distance` /\n`max_stops`) instead of the amount, so a 4 h shift next to 8 h shifts\ngets half their work; every vehicle then needs that limit."
+          },
+          "tolerance": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "number",
+                "minimum": 0,
+                "exclusiveMaximum": 1
+              }
+            ],
+            "description": "Free band around the average as a fraction, 0..0.99 (default 0.1);\nnull restores the default."
+          },
+          "unit_cost": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "number",
+                "minimum": 0
+              }
+            ],
+            "description": "Authored price of one unit of imbalance beyond the band (per hour,\nkm/mi, stop, or 100% of the limit when scaled); null = automatic from\nthe strength and the fleet's own rates (default)."
+          }
+        },
+        "required": []
+      },
+      "WorkloadGroupPatch": {
+        "type": "object",
+        "properties": {
+          "balance": {
+            "oneOf": [
+              {
+                "const": "off"
+              },
+              {
+                "const": "duration"
+              },
+              {
+                "const": "driving"
+              },
+              {
+                "const": "distance"
+              },
+              {
+                "const": "stops"
+              }
+            ],
+            "description": "What to even out over the vehicles in use: `off` = no balancing (a\nvehicle's `required` / `required_count` floor still applies), `duration` = working\ntime, `driving` = driving time only, `distance`, `stops`."
           },
           "strength": {
             "oneOf": [
@@ -3333,35 +3483,16 @@
             ],
             "description": "Authored price of one unit of imbalance beyond the band (per hour,\nkm/mi, stop, or 100% of the limit when scaled); null = automatic from\nthe strength and the fleet's own rates (default)."
           },
-          "missing_vehicle_cost": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "type": "number",
-                "minimum": 0
-              }
-            ],
-            "description": "Price of a vehicle a floor asks for that stays idle; null = the\nunassigned-order penalty (default)."
-          },
-          "min_vehicles": {
-            "oneOf": [
-              {
-                "const": "all"
-              },
-              {
-                "const": "none"
-              },
-              {
-                "type": "integer",
-                "minimum": 1
-              }
-            ],
-            "description": "Fleet floor: `all` = every vehicle of the plan, a number = at least\nthat many, `none` = as many as the plan needs (default). A vehicle's\nown `required_count` applies regardless."
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The balance group: the `workload_group` its vehicles carry\n(routing24_upsert_vehicles), matched exactly."
           }
         },
-        "required": []
+        "required": [
+          "name"
+        ],
+        "description": "One balance group's balancing, patched by `name`."
       },
       "PlanSettingsResult": {
         "type": "object",
@@ -3378,6 +3509,10 @@
           },
           "settings": {
             "$ref": "#/components/schemas/PlanSettingsDoc"
+          },
+          "next": {
+            "type": "string",
+            "description": "After an applied `set`: what happens next."
           }
         },
         "required": [
@@ -3415,93 +3550,167 @@
               "$ref": "#/components/schemas/LoadClassGroup"
             }
           },
+          "require_all_vehicles": {
+            "type": "boolean"
+          },
+          "required_vehicles": {
+            "type": "number",
+            "description": "Vehicles the fleet's `required` / `required_count` floors ask for in\ntotal (every vehicle under `require_all_vehicles`)."
+          },
           "workload": {
-            "type": "object",
-            "properties": {
-              "balance": {
-                "oneOf": [
-                  {
-                    "const": "off"
-                  },
-                  {
-                    "const": "duration"
-                  },
-                  {
-                    "const": "driving"
-                  },
-                  {
-                    "const": "distance"
-                  },
-                  {
-                    "const": "stops"
-                  }
-                ]
-              },
-              "strength": {
-                "oneOf": [
-                  {
-                    "const": "loose"
-                  },
-                  {
-                    "const": "normal"
-                  },
-                  {
-                    "const": "strict"
-                  }
-                ]
-              },
-              "scaled": {
-                "type": "boolean"
-              },
-              "tolerance": {
-                "type": "number"
-              },
-              "unit_cost": {
-                "type": "number",
-                "description": "Authored price; absent = automatic."
-              },
-              "last_unit_cost": {
-                "type": "number",
-                "description": "The price the last optimization used per unit of imbalance, when it\nbalanced the same resource in the same form (absent otherwise)."
-              },
-              "missing_vehicle_cost": {
-                "type": "number"
-              },
-              "min_vehicles": {
-                "oneOf": [
-                  {
-                    "const": "all"
-                  },
-                  {
-                    "const": "none"
-                  },
-                  {
-                    "type": "number"
-                  }
-                ]
-              },
-              "required_vehicles": {
-                "type": "number",
-                "description": "Vehicles the fleet's `required_count` floors ask for in total."
-              }
+            "$ref": "#/components/schemas/WorkloadSettingsDoc",
+            "description": "The one setting that balances every vehicle with every other;\n`balance: \"off\"` while `workload_groups` balances per group."
+          },
+          "workload_groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkloadGroupDoc"
             },
-            "required": [
-              "balance",
-              "strength",
-              "scaled",
-              "tolerance",
-              "min_vehicles",
-              "required_vehicles"
-            ]
+            "description": "Balancing per balance group: one entry per group that balances.\nEmpty = not balancing per group. While it has entries, a vehicle in\nno listed group is not balanced."
+          },
+          "vehicle_workload_groups": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The `workload_group` names the plan's vehicles carry: the groups\n`workload_groups` can balance."
           }
         },
         "required": [
           "optimization_time",
           "automatic_time_s",
           "incompatible_load_classes",
-          "workload"
+          "require_all_vehicles",
+          "required_vehicles",
+          "workload",
+          "workload_groups",
+          "vehicle_workload_groups"
         ],
         "description": "The plan's optimisation settings as they stand, every default spelled out."
+      },
+      "WorkloadSettingsDoc": {
+        "type": "object",
+        "properties": {
+          "balance": {
+            "oneOf": [
+              {
+                "const": "off"
+              },
+              {
+                "const": "duration"
+              },
+              {
+                "const": "driving"
+              },
+              {
+                "const": "distance"
+              },
+              {
+                "const": "stops"
+              }
+            ]
+          },
+          "strength": {
+            "oneOf": [
+              {
+                "const": "loose"
+              },
+              {
+                "const": "normal"
+              },
+              {
+                "const": "strict"
+              }
+            ]
+          },
+          "scaled": {
+            "type": "boolean"
+          },
+          "tolerance": {
+            "type": "number"
+          },
+          "unit_cost": {
+            "type": "number",
+            "description": "Authored price; absent = automatic."
+          },
+          "last_unit_cost": {
+            "type": "number",
+            "description": "The price the last optimization used per unit of imbalance, when it\nbalanced the same resource in the same form (absent otherwise)."
+          }
+        },
+        "required": [
+          "balance",
+          "strength",
+          "scaled",
+          "tolerance"
+        ]
+      },
+      "WorkloadGroupDoc": {
+        "type": "object",
+        "properties": {
+          "balance": {
+            "oneOf": [
+              {
+                "const": "off"
+              },
+              {
+                "const": "duration"
+              },
+              {
+                "const": "driving"
+              },
+              {
+                "const": "distance"
+              },
+              {
+                "const": "stops"
+              }
+            ]
+          },
+          "strength": {
+            "oneOf": [
+              {
+                "const": "loose"
+              },
+              {
+                "const": "normal"
+              },
+              {
+                "const": "strict"
+              }
+            ]
+          },
+          "scaled": {
+            "type": "boolean"
+          },
+          "tolerance": {
+            "type": "number"
+          },
+          "unit_cost": {
+            "type": "number",
+            "description": "Authored price; absent = automatic."
+          },
+          "last_unit_cost": {
+            "type": "number",
+            "description": "The price the last optimization used per unit of imbalance, when it\nbalanced the same resource in the same form (absent otherwise)."
+          },
+          "name": {
+            "type": "string",
+            "description": "The balance group: the `workload_group` of its vehicles."
+          },
+          "vehicles": {
+            "type": "number",
+            "description": "How many vehicles carry the name (`available_count` counted)."
+          }
+        },
+        "required": [
+          "balance",
+          "strength",
+          "scaled",
+          "tolerance",
+          "name",
+          "vehicles"
+        ]
       },
       "OpenPageInput": {
         "type": "object",
@@ -4263,10 +4472,19 @@
       "$ref": "#/components/schemas/WorkloadSettingsPatch"
     },
     {
+      "$ref": "#/components/schemas/WorkloadGroupPatch"
+    },
+    {
       "$ref": "#/components/schemas/PlanSettingsResult"
     },
     {
       "$ref": "#/components/schemas/PlanSettingsDoc"
+    },
+    {
+      "$ref": "#/components/schemas/WorkloadSettingsDoc"
+    },
+    {
+      "$ref": "#/components/schemas/WorkloadGroupDoc"
     },
     {
       "$ref": "#/components/schemas/WorkloadBalanceReport"

@@ -64,7 +64,7 @@ routing24_upsert_stops({
 });
 routing24_reoptimize_plan({}); // options: { time_limit_s: 30 }
 
-// 4) Poll by looping on routing24_status until phase is 'done' or 'error': while a solve runs each call holds its reply up to ~15s (returning early when the solve lands), so call it back-to-back — no sleep between calls is needed. Relay progress meanwhile.
+// 4) Poll by looping on routing24_status until phase is "done", "interrupted" or "error": while a solve runs each call holds its reply up to ~15s (returning early when the solve lands), so call it back-to-back — no sleep between calls is needed. Relay progress meanwhile.
 routing24_status();
 
 // 5) Show routes on the map, then persist and get the plan link.
