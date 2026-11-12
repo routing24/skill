@@ -1,6 +1,6 @@
 # Routing24 route optimizer — API reference
 
-> Generated from Routing24's own types (skill version 10.1.0). The
+> Generated from Routing24's own types (skill version 10.2.0). The
 > always-current copy is served at https://routing24.com/llms.txt.
 
 The `routing24_*` tools, one section per tool. The shapes are the same
@@ -447,7 +447,7 @@ type InsertionQuote = {
   arrangement only — never sum them, and refresh via `refresh_diagnostics`
   when `diagnosticsStale`.
 
-### `routing24_edit_move_stops` / `routing24_edit_unassign_stops` / `routing24_edit_set_route_vehicle` / `routing24_edit_create_route` / `routing24_edit_remove_routes` / `routing24_edit_split_route` / `routing24_edit_merge_routes` / `routing24_edit_mark_user_assigned` / `routing24_edit_clear_user_assigned` → `EditResult`
+### `routing24_edit_move_stops` / `routing24_edit_unassign_stops` / `routing24_edit_set_route_vehicle` / `routing24_edit_create_route` / `routing24_edit_remove_routes` / `routing24_edit_split_route` / `routing24_edit_merge_routes` / `routing24_edit_reverse_route` / `routing24_edit_mark_user_assigned` / `routing24_edit_clear_user_assigned` → `EditResult`
 Manual editing of the loaded solution — **one tool per action**, each taking
 one flat input (no op unions to compose). Stops are addressed by their `id`,
 routes by their 1-based `route` number from `routing24_status.routeStats`.
@@ -461,6 +461,7 @@ routes by their 1-based `route` number from `routing24_status.routeStats`.
 | `routing24_edit_remove_routes` | `EditRemoveRoutesInput` | delete routes (unassigns their stops first) |
 | `routing24_edit_split_route` | `EditSplitRouteInput` | split one route in two after a stop |
 | `routing24_edit_merge_routes` | `EditMergeRoutesInput` | move sources' stops onto a target |
+| `routing24_edit_reverse_route` | `EditReverseRouteInput` | reverse one route's stop order |
 | `routing24_edit_mark_user_assigned` | `EditMarkStopsInput` | badge + problem report on placed stops |
 | `routing24_edit_clear_user_assigned` | `EditMarkStopsInput` | drop that badge ("Dismiss") |
 
@@ -525,6 +526,12 @@ type EditSplitRouteInput = {
 type EditMergeRoutesInput = {
     target: integer;  // Route number (1-based) that receives the stops. — >= 1
     sources: integer[];  // Route numbers (1-based) whose stops move onto `target`, left empty afterwards. — min 1
+};
+```
+```ts
+// Input for `routing24_edit_reverse_route`.
+type EditReverseRouteInput = {
+    route: integer;  // Route number (1-based) whose stop order is reversed; needs a trip with ≥2 stops. — >= 1
 };
 ```
 ```ts

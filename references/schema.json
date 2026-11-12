@@ -1467,6 +1467,20 @@
         ],
         "description": "Input for `routing24_edit_merge_routes`."
       },
+      "EditReverseRouteInput": {
+        "type": "object",
+        "properties": {
+          "route": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Route number (1-based) whose stop order is reversed; needs a trip\nwith ≥2 stops."
+          }
+        },
+        "required": [
+          "route"
+        ],
+        "description": "Input for `routing24_edit_reverse_route`."
+      },
       "EditMarkStopsInput": {
         "type": "object",
         "properties": {
@@ -4404,6 +4418,9 @@
     },
     {
       "$ref": "#/components/schemas/EditMergeRoutesInput"
+    },
+    {
+      "$ref": "#/components/schemas/EditReverseRouteInput"
     },
     {
       "$ref": "#/components/schemas/EditMarkStopsInput"

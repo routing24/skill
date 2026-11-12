@@ -25,7 +25,7 @@ compatibility: >-
   under the user's session.
 metadata:
   author: Routinghub LLC
-  version: "10.1.0"
+  version: "10.2.0"
 ---
 
 # Routing24 route optimizer
@@ -230,6 +230,7 @@ it in place — the same manual-editing engine the UI's drag & drop uses:
    `routing24_edit_set_route_vehicle`, `routing24_edit_create_route`,
    `routing24_edit_remove_routes` (unassigns any stops still on them, same
    atomic edit), `routing24_edit_split_route`, `routing24_edit_merge_routes`,
+   `routing24_edit_reverse_route`,
    `routing24_edit_mark_user_assigned` / `routing24_edit_clear_user_assigned`.
    Each call applies atomically and is one undo entry; a rejection says why in
    `rejection.code` (`stale_revision` = the plan changed under you: re-read
@@ -279,8 +280,9 @@ use the MCP connector instead.
 
 Everything else in this skill is unchanged — same tools, same arguments, same
 results. Only the call mechanism differs: `executeTool` takes the tool OBJECT
-from `getTools()` and a JSON-STRING argument, and resolves to a JSON string you
-must parse (it rejects on validation and handler errors).
+from `getTools()` and the arguments (a JSON STRING through Chrome 156, a plain
+object from Chrome 157), and resolves to a JSON string you must parse (it
+rejects on validation and handler errors).
 
 1. `navigate` to `https://routing24.com/app/plan/new/optimize`.
 2. Confirm the tools are present:
@@ -298,7 +300,14 @@ must parse (it rejects on validation and handler errors).
    window.__r24call = async (name, args = {}) => {
        const tool = tools.find(t => t.name === name);
        if (!tool) throw new Error('tool not found: ' + name);
-       const raw = await mc.executeTool(tool, JSON.stringify(args));
+       let raw;
+       try {
+           raw = await mc.executeTool(tool, JSON.stringify(args));
+       } catch (e) {
+           // Chrome 157+ refuses the string before the tool runs.
+           if (!(e instanceof TypeError) || !/parameter 2/.test(e.message)) throw e;
+           raw = await mc.executeTool(tool, args);
+       }
        return raw == null ? null : JSON.parse(raw);
    };
    ```
@@ -322,7 +331,7 @@ Load these only as the task calls for them (progressive disclosure):
 
 ## Version & keeping current
 
-- This skill is **version 10.1.0**. Its bundled reference
+- This skill is **version 10.2.0**. Its bundled reference
   (`references/api.md` + `references/schema.json`) is generated from Routing24's
   own types and is correct as of this version.
 - The **always-current** copy of the full contract is served at
