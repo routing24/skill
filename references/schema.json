@@ -116,8 +116,16 @@
           "stops": {
             "type": "number"
           },
+          "ordersInPlan": {
+            "type": "number",
+            "description": "Orders in the plan as it was optimized. `stops` of them are on a route;\nthe others are counted in `unassignedCount` and\n`alternativesNotChosenCount`."
+          },
           "unassignedCount": {
             "type": "number"
+          },
+          "alternativesNotChosenCount": {
+            "type": "number",
+            "description": "Orders on no route because another order of their `group` is served\n(one order per alternatives group). They are not in `unassignedCount`;\ntheir ids come from `routing24_unassigned`."
           },
           "unassignedSummary": {
             "type": "string",
@@ -146,6 +154,14 @@
           "driftFromOptimized": {
             "$ref": "#/components/schemas/OptimizedDrift",
             "description": "Drift vs the last full optimization (absent while a solve runs)."
+          },
+          "changedSincePreviousSolve": {
+            "$ref": "#/components/schemas/SolveChangeReport",
+            "description": "What the last optimization changed against the one before it; see\n{@link SolveChangeReport}. Absent on a first optimization, while a\nsolve runs, and when the one before was saved without its routes."
+          },
+          "directionBreaks": {
+            "type": "number",
+            "description": "Route direction preference, of the last optimization: the places\nwhere a route goes against its direction because another constraint\n(a time window) won there. 0 = the direction holds on every route.\nAbsent when that optimization ran without the setting or no vehicle\nhad a direction; a change of the setting shows at the next one."
           },
           "workloadBalance": {
             "$ref": "#/components/schemas/WorkloadBalanceReport",
@@ -316,6 +332,24 @@
           "summary"
         ],
         "description": "How far the CURRENT plan has drifted from the last full optimization —\ncovering every change since that solve, the user's manual edits included.\nRecompute-free: the baseline is frozen at solve completion; only a new\n`routing24_reoptimize_plan` (or the user's OPTIMIZE button) resets it. Absent when\nthe plan predates the baseline feature or was never solved.\n\nREPORTING OBLIGATION: when `severity` is `degraded` or `severe`, tell the\nuser (quote `summary`) and stop there. An edit the user asked for is\nexpected to cost more — never re-optimize (or propose it) to walk one back;\nre-optimizing is only ever the user's own request."
+      },
+      "SolveChangeReport": {
+        "type": "object",
+        "properties": {
+          "stopOrder": {
+            "type": "boolean",
+            "description": "False = the same vehicles serve the same stops in the same order as\nafter the previous optimization. True = some route differs."
+          },
+          "servedOrders": {
+            "type": "number",
+            "description": "Orders served now minus orders served then (+ = more, 0 = the same\nnumber)."
+          }
+        },
+        "required": [
+          "stopOrder",
+          "servedOrders"
+        ],
+        "description": "The last optimization against the one it replaced, both as the optimizer\nleft them: manual edits made in between do not count. The answer to \"did\nre-optimizing change the routes\"."
       },
       "WorkloadBalanceReport": {
         "type": "object",
@@ -3025,6 +3059,13 @@
               "type": "string"
             },
             "description": "Load units this batch DECLARED on the plan (first upsert naming units\nonly), in the plan's unit order."
+          },
+          "effects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What the write does to the plan, for the fields that are easily taken\nfor something else: one sentence per field written (alternatives\n`group`, `priority`, vehicle `tags`). Absent = none of them changed."
           }
         },
         "required": [
@@ -3358,6 +3399,20 @@
               }
             ],
             "description": "Route balancing PER BALANCE GROUP, instead of `workload`: each entry\nbalances the vehicles whose `workload_group` is its `name` among\nthemselves, with its own measure, strength and prices. A vehicle in\nno listed group is NOT balanced. PATCH by `name`: entries not sent\nkeep their settings, `balance: \"off\"` removes a group's balancing,\nnull clears every group. With `workload` balancing every vehicle,\nsend `workload: {balance: \"off\"}` in the same call."
+          },
+          "route_direction": {
+            "oneOf": [
+              {
+                "const": "off"
+              },
+              {
+                "const": "depots"
+              },
+              {
+                "const": "farthest_first"
+              }
+            ],
+            "description": "Route direction preference, the ONLY way to give routes a direction.\n`depots`: each route works its way from its start depot toward its\nend depot and does not return to an area it has left.\n`farthest_first`: each route drives to its farthest orders first and\nserves the rest on the way back. `off` (default): none. One setting\nfor every route, nothing per order; it still serves every order. No\ncompass: the direction follows each vehicle's depots (result:\n`vehicle_directions`)."
           }
         },
         "required": []
@@ -3588,6 +3643,27 @@
               "type": "string"
             },
             "description": "The `workload_group` names the plan's vehicles carry: the groups\n`workload_groups` can balance."
+          },
+          "route_direction": {
+            "oneOf": [
+              {
+                "const": "off"
+              },
+              {
+                "const": "depots"
+              },
+              {
+                "const": "farthest_first"
+              }
+            ],
+            "description": "Route direction preference: `off`, `depots` (start depot to end\ndepot) or `farthest_first`."
+          },
+          "vehicle_directions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VehicleDirectionDoc"
+            },
+            "description": "Per vehicle, how its depots lie and which `route_direction` values\ngive it a direction. A vehicle a value gives none runs as with `off`."
           }
         },
         "required": [
@@ -3598,7 +3674,9 @@
           "required_vehicles",
           "workload",
           "workload_groups",
-          "vehicle_workload_groups"
+          "vehicle_workload_groups",
+          "route_direction",
+          "vehicle_directions"
         ],
         "description": "The plan's optimisation settings as they stand, every default spelled out."
       },
@@ -3726,6 +3804,39 @@
           "vehicles"
         ]
       },
+      "VehicleDirectionDoc": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Vehicle business id."
+          },
+          "depots": {
+            "type": "string",
+            "description": "How its depots lie. Two depots apart: the straight-line distance from\nthe start depot to the end depot and the compass point of that way,\n\"54 km, south-east\" (eight points; the plan's distance unit). The\ndirection of `depots` is this way: toward the end depot. Otherwise:\n\"round trip\" (starts and ends at one place, so no line between two\ndepots: under `depots` the route goes area by area, the area nearest\nthe depot first), \"no end depot\", \"no start depot\", \"no depots\", or\n\"end depot not located\" / \"start depot not located\" (its address has\nno coordinates yet)."
+          },
+          "has_direction": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "const": "depots"
+                },
+                {
+                  "const": "farthest_first"
+                }
+              ]
+            },
+            "description": "The `route_direction` values that give this vehicle a direction:\n`depots` needs a start and an end depot, both located (one depot for\nboth ends counts); `farthest_first` needs a located end depot (a\nround trip has one). Empty = neither."
+          }
+        },
+        "required": [
+          "id",
+          "depots",
+          "has_direction"
+        ],
+        "description": "One vehicle's depots as the route direction preference reads them."
+      },
       "OpenPageInput": {
         "type": "object",
         "properties": {
@@ -3735,13 +3846,13 @@
                 "const": "stops"
               },
               {
+                "const": "depots"
+              },
+              {
                 "const": "home"
               },
               {
                 "const": "plans"
-              },
-              {
-                "const": "depots"
               },
               {
                 "const": "vehicles"
@@ -4065,6 +4176,13 @@
           },
           "fleetDiagnostics": {
             "$ref": "#/components/schemas/FleetDiagnostics"
+          },
+          "effects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What the write does to the plan, for the fields that are easily taken\nfor something else: one sentence per field written (alternatives\n`group`, `priority`, vehicle `tags`). Absent = none of them changed."
           }
         },
         "required": [
@@ -4167,6 +4285,13 @@
           "relocatedEntities": {
             "type": "number",
             "description": "Entities relocated by the script writing `address`/`area` (the new\ntext was re-geocoded; a failed geocode is reported in `warnings`)."
+          },
+          "effects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What the write does to the plan, for the fields that are easily taken\nfor something else: one sentence per field written (alternatives\n`group`, `priority`, vehicle `tags`). Absent = none of them changed."
           }
         },
         "required": [

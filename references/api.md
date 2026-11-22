@@ -1,6 +1,6 @@
 # Routing24 route optimizer — API reference
 
-> Generated from Routing24's own types (skill version 10.2.0). The
+> Generated from Routing24's own types (skill version 10.3.0). The
 > always-current copy is served at https://routing24.com/llms.txt.
 
 The `routing24_*` tools, one section per tool. The shapes are the same
@@ -66,13 +66,17 @@ type OptimizeStatus = {
     feasible?: boolean;
     routes?: number;
     stops?: number;
+    ordersInPlan?: number;  // Orders in the plan as it was optimized. `stops` of them are on a route; the others are counted in `unassignedCount` and `alternativesNotChosenCount`.
     unassignedCount?: number;
+    alternativesNotChosenCount?: number;  // Orders on no route because another order of their `group` is served (one order per alternatives group). They are not in `unassignedCount`; their ids come from `routing24_unassigned`.
     unassignedSummary?: string;  // One-line WHY for a nonzero `unassignedCount` (from the last computed diagnostics), so every status poll keeps the reasons one hop away. The per-stop reasons, numeric targets and fixes come from `routing24_unassigned`.
     distance?: number;
     distanceUnit?: "km" | "mi";
     durationHours?: number;
     problemsCount?: number;  // Total constraint-problem markers across all routes (0 = feasible).
     driftFromOptimized?: OptimizedDrift;  // Drift vs the last full optimization (absent while a solve runs).
+    changedSincePreviousSolve?: SolveChangeReport;  // What the last optimization changed against the one before it; see {@link SolveChangeReport}. Absent on a first optimization, while a solve runs, and when the one before was saved without its routes.
+    directionBreaks?: number;  // Route direction preference, of the last optimization: the places where a route goes against its direction because another constraint (a time window) won there. 0 = the direction holds on every route. Absent when that optimization ran without the setting or no vehicle had a direction; a change of the setting shows at the next one.
     workloadBalance?: { balance: "off" | "duration" | "driving" | "distance" | "stops" | "groups"; scaled: boolean; unit?: "stops" | "km" | "mi" | "h" | "utilisation"; mean?: number; maxDeviation?: number; tolerance?: number; unitCost?: number; balanceCost: number; unassignedVehiclesCost: number; unassignedVehicles: number; groups?: ({ name: string; balance: "duration" | "driving" | "distance" | "stops"; scaled: boolean; unit: "stops" | "km" | "mi" | "h" | "utilisation"; mean: number; maxDeviation: number; members: number; unassigned: number; unitCost: number })[]; unusableRequired?: { vehicleId: string; constraint?: string }[] };  // Route balancing of the last solve; absent when it was off and no vehicle floor was set.
     error?: string;
     planUuid?: string;  // The plan the call acted on. EXTERNAL (MCP) surface only — the in-app chat drives one loaded plan, so the handler omits it there. A handle in a result reads to a weak model as a handle to pass back: one echoed it into every following call and spent the turn on unknown-field rejections (llm-planuuid-err). No input anywhere takes it.
@@ -220,6 +224,15 @@ type OptimizedDrift = {
 };
 ```
 ```ts
+// The last optimization against the one it replaced, both as the optimizer
+// left them: manual edits made in between do not count. The answer to "did
+// re-optimizing change the routes".
+type SolveChangeReport = {
+    stopOrder: boolean;  // False = the same vehicles serve the same stops in the same order as after the previous optimization. True = some route differs.
+    servedOrders: number;  // Orders served now minus orders served then (+ = more, 0 = the same number).
+};
+```
+```ts
 // What changed in the plan data AFTER the last optimization — the same
 // condition that shows the user the NOT SYNC badge. The current solution and
 // the route-editing tools still see the plan as of that solve; the changes
@@ -272,6 +285,16 @@ type EntityKindDiff = {
   `severity: "degraded" | "severe"` you MUST tell the user (quote `summary`)
   and stop there — never re-optimize (or propose it) to walk back an edit the
   user asked for; re-optimizing is only ever the user's own request.
+- `stops` is the served count, not the plan: read it against
+  `ordersInPlan`. The orders on no route are `unassignedCount` (failures;
+  the reasons are in `routing24_unassigned`) plus
+  `alternativesNotChosenCount` (orders whose `group` has another order
+  served: one order per alternatives group).
+- `changedSincePreviousSolve` answers "did re-optimizing change the routes":
+  `stopOrder: false` means the same vehicles serve the same stops in the same
+  order as after the previous optimization, and `servedOrders` is the change
+  in served orders. After a change meant to alter the routes, report from these
+  fields and from `routing24_route`; never state an effect they do not show.
 - `routeStats[].route` (1-based, the on-screen route number) is the ONE
   route address every tool takes — `routing24_route`,
   `routing24_reoptimize_route` and the editing tools alike.
@@ -912,6 +935,7 @@ type UpsertResult = {
     addressDiagnostics?: AddressDiagnostics;  // Present only when the batch left address problems behind.
     fleetDiagnostics?: { summary: string; problems: { category: "vehicle_incompatible"; count: number; explanation: string; lever: string }[] };  // Present only when the edit left stops no vehicle can serve.
     unitsDeclared?: string[];  // Load units this batch DECLARED on the plan (first upsert naming units only), in the plan's unit order.
+    effects?: string[];  // What the write does to the plan, for the fields that are easily taken for something else: one sentence per field written (alternatives `group`, `priority`, vehicle `tags`). Absent = none of them changed.
 };
 ```
 ```ts
@@ -967,6 +991,15 @@ type AddressDiagnostics = {
   `available_count` = identical vehicles of that type.
 - Stops sharing a `group` are mutually exclusive alternatives: the solver
   serves at most one per group and reports the rest as `alternativesNotChosen`.
+  It is not a way to group stops by area: 59 orders in 11 groups leave 11
+  served.
+- `priority` decides which stops are dropped when not all fit; it does not
+  affect the visit order. Tags (`required_tags`, `forbidden_tags`, a
+  vehicle's `tags`) decide which vehicle may serve a stop, not the order of
+  stops.
+- A write to `group`, `priority` or a vehicle's `tags` returns
+  `effects` (upserts, `routing24_sql_update`, `routing24_run_script`):
+  what the write does to the plan, one sentence per field. Relay them.
 - **Alternative pickup/delivery locations**: several stops with the same
   `transfer_id` and role (all `pickup` or all `delivery`), sharing one
   `group` of their own (equal loads), are candidate locations for that end —
@@ -975,7 +1008,9 @@ type AddressDiagnostics = {
 - **Sequences**: stops sharing a `sequence_group` are served all-or-none, by
   ONE vehicle, in non-decreasing `sequence_rank` order (other stops may come
   between them). Plain stops only (no transfers, no `group`), one service
-  window each, 2..16 stops per group.
+  window each, 2..16 stops per group. For a few specific stops, not for a
+  whole route; a route's direction is the plan setting. A `sequence_rank`
+  written on a stop with no `sequence_group` is rejected.
 - **Product segregation**: give stops a `load_class` and vehicles
   `no_mix_load_classes` — groups of class names; two classes of one group
   never ride together on that vehicle's route (reload trips included). Groups
@@ -1125,7 +1160,8 @@ the Loose / Normal / Strict strength, "use all my vehicles"
 is one setting for every vehicle (`workload`: all of them balanced with each
 other) or one per balance group (`workload_groups`: each entry balances the
 vehicles whose `workload_group` is its `name`, with its own measure and
-strength, and a vehicle in no listed group is not balanced), never both. No
+strength, and a vehicle in no listed group is not balanced), never both.
+`route_direction` is the route direction preference: see the notes below. No
 `set` reads; `set` is a PATCH (fields omitted keep their values, `null`
 restores a default; `workload_groups` is patched by `name`). A vehicle type's
 "Required" / "Required count" is `required` /
@@ -1146,6 +1182,7 @@ type PlanSettingsPatch = {
     incompatible_load_classes?: null | { classes: string[] }[];  // Plan-wide "Do not mix" groups of stop `load_class` names, on top of each vehicle's own `no_mix_load_classes`: REPLACES the list; `[]` or null clears it.
     workload?: WorkloadSettingsPatch;  // Route balancing with ONE setting for every vehicle: all of them are balanced with each other, whatever their `workload_group`. Fields omitted keep their values. Not together with `workload_groups`.
     workload_groups?: null | WorkloadGroupPatch[];  // Route balancing PER BALANCE GROUP, instead of `workload`: each entry balances the vehicles whose `workload_group` is its `name` among themselves, with its own measure, strength and prices. A vehicle in no listed group is NOT balanced. PATCH by `name`: entries not sent keep their settings, `balance: "off"` removes a group's balancing, null clears every group. With `workload` balancing every vehicle, send `workload: {balance: "off"}` in the same call.
+    route_direction?: "off" | "depots" | "farthest_first";  // STARTER: Route direction preference — Route direction preference, the ONLY way to give routes a direction. `depots`: each route works its way from its start depot toward its end depot and does not return to an area it has left. `farthest_first`: each route drives to its farthest orders first and serves the rest on the way back. `off` (default): none. One setting for every route, nothing per order; it still serves every order. No compass: the direction follows each vehicle's depots (result: `vehicle_directions`).
 };
 ```
 ```ts
@@ -1188,6 +1225,8 @@ type PlanSettingsDoc = {
     workload: WorkloadSettingsDoc;  // The one setting that balances every vehicle with every other; `balance: "off"` while `workload_groups` balances per group.
     workload_groups: WorkloadGroupDoc[];  // Balancing per balance group: one entry per group that balances. Empty = not balancing per group. While it has entries, a vehicle in no listed group is not balanced.
     vehicle_workload_groups: string[];  // The `workload_group` names the plan's vehicles carry: the groups `workload_groups` can balance.
+    route_direction: "off" | "depots" | "farthest_first";  // Route direction preference: `off`, `depots` (start depot to end depot) or `farthest_first`.
+    vehicle_directions: VehicleDirectionDoc[];  // Per vehicle, how its depots lie and which `route_direction` values give it a direction. A vehicle a value gives none runs as with `off`.
 };
 ```
 ```ts
@@ -1212,6 +1251,22 @@ type WorkloadGroupDoc = {
     vehicles: number;  // How many vehicles carry the name (`available_count` counted).
 };
 ```
+```ts
+// One vehicle's depots as the route direction preference reads them.
+type VehicleDirectionDoc = {
+    id: string;  // Vehicle business id.
+    depots: string;  // How its depots lie. Two depots apart: the straight-line distance from the start depot to the end depot and the compass point of that way, "54 km, south-east" (eight points; the plan's distance unit). The direction of `depots` is this way: toward the end depot. Otherwise: "round trip" (starts and ends at one place, so no line between two depots: under `depots` the route goes area by area, the area nearest the depot first), "no end depot", "no start depot", "no depots", or "end depot not located" / "start depot not located" (its address has no coordinates yet).
+    has_direction: ("depots" | "farthest_first")[];  // The `route_direction` values that give this vehicle a direction: `depots` needs a start and an end depot, both located (one depot for both ends counts); `farthest_first` needs a located end depot (a round trip has one). Empty = neither.
+};
+```
+- `route_direction` is the route direction preference and the ONLY way to give routes a direction: "depots" = each route works its way from its start depot toward its end depot and does not come back to an area it has left; "farthest_first" = each route drives to its farthest orders first and serves the rest on the way back. The app names the setting "Route direction preference" and its choices "Off", "Start depot to end depot" ("depots") and "Farthest first" ("farthest_first"): use these names in your answer. It is one setting for every route: the sections of a route are chosen automatically (nobody names or draws them: for areas the user lists, set the preference and say that the sections are chosen automatically), every order is still served, and no order or vehicle is edited for it — never use priority, tags, `group`, time windows or sequences for this, and never add vehicles. Saving it is not a decision to ask about: it moves no route until the next optimization and "off" takes it back. So where a case below says "set", set it in the same turn without asking first, then say what you set and that the routes change with the next optimization; start that optimization yourself only when the message asked to optimize or re-optimize, and then without asking. It has no compass: the direction follows the depots. A request by compass ("north to south", "start in the north", "from farthest north to farthest south") always means "depots", never "farthest_first", which is only for "the farthest stop first, then back toward the depot". For a compass request read `vehicle_directions` first: `depots` is the way FROM the start depot TO the end depot, e.g. "54 km, south-east" = the end depot lies 54 km south-east of the start depot, so the route runs from the north-west to the south-east. One of three cases holds. (1) The way points where the user wants the route to end ("north to south" and a way of south, south-east or south-west): the depots already lie as asked, set "depots". (2) The way points the opposite way ("north to south" and a way of north, north-east or north-west): set nothing yet; say that the direction follows the depots and ask the user to confirm swapping the start and end depot of the vehicle; on yes swap them with routing24_upsert_vehicles and set "depots", on no change nothing. (3) "round trip": the route has no line between two depots, so no compass request can be met: set nothing; say so, and offer both choices, "Start depot to end depot" (on a round trip: the areas of the route one after another, the area nearest the depot first) and "Farthest first". "Group by city or zip" and "stops as close together as possible" are not settings. Answer such a request with two things: that there is no such setting (the optimization already minimises distance and time), and an offer of this preference, by its name, as the way to keep a route from coming back to an area. Edit nothing, change no setting and start no optimization for it: this preference stays as it is too, also when the user dislikes the routes it gave, and is turned off only when the user asks for that.
+- `vehicle_directions[].has_direction` lists the values that give the vehicle
+  a direction. A value that gives no vehicle a direction is refused.
+- `routing24_status.directionBreaks` is a figure of the last optimization:
+  the places where a route goes against its direction because another
+  constraint won there; 0 means the direction holds on every route. It is
+  absent when that optimization ran without the setting or no vehicle had a
+  direction.
 
 ### `routing24_export_excel` → `ExportExcelResult`
 No input. Downloads the loaded plan as an Excel workbook (browser download):
@@ -1234,7 +1289,7 @@ menu. `stops` is the Orders page; `plans` is My Plans.
 ```ts
 // Input for `routing24_open_page`.
 type OpenPageInput = {
-    page: "stops" | "home" | "plans" | "depots" | "vehicles" | "optimize";  // The app page to open ("stops" is the Orders page).
+    page: "stops" | "depots" | "home" | "plans" | "vehicles" | "optimize";  // The app page to open ("stops" is the Orders page).
 };
 ```
 
@@ -1348,6 +1403,7 @@ type SqlUpdateResult = {
     errors?: { kind: string; id: string; message: string }[];  // Validation rejections — nothing was applied.
     warnings?: string[];
     fleetDiagnostics?: { summary: string; problems: { category: "vehicle_incompatible"; count: number; explanation: string; lever: string }[] };
+    effects?: string[];  // What the write does to the plan, for the fields that are easily taken for something else: one sentence per field written (alternatives `group`, `priority`, vehicle `tags`). Absent = none of them changed.
 };
 ```
 
@@ -1388,6 +1444,7 @@ type RunScriptResult = {
     unitsDeclared?: string[];  // Load units this script's created rows newly declared on the plan.
     selections?: { sel_table: string; count: number; sample: string[] }[];  // Selections the script saved, materialized as sel_* temp tables.
     relocatedEntities?: number;  // Entities relocated by the script writing `address`/`area` (the new text was re-geocoded; a failed geocode is reported in `warnings`).
+    effects?: string[];  // What the write does to the plan, for the fields that are easily taken for something else: one sentence per field written (alternatives `group`, `priority`, vehicle `tags`). Absent = none of them changed.
 };
 ```
 
