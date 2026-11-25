@@ -2071,7 +2071,7 @@
           },
           "area": {
             "type": "string",
-            "description": "Optional area/city qualifier shown after the address (the address book's\n`address`+`area` identity). The `routing24_list_*` tools return it on\nevery stop/depot row, so accepting it here is what makes that row\nwritable back through `routing24_upsert_stops`/`_depots` unchanged."
+            "description": "Where the address is: town, state, postcode and country as ONE string\n(\"Quinlan, TX 75474\"); there are no separate city, state or zip\nfields. It is geocoded with the address, and a changed `area` geocodes\nthe place again. A NEW `address` does not keep the stored `area`: send\nthe new place's area with it. `routing24_list_*` rows carry it, so a\nlisted row goes back through `routing24_upsert_stops`/`_depots`\nunchanged."
           },
           "service_duration_s": {
             "type": "number"
@@ -2499,7 +2499,7 @@
           },
           "area": {
             "type": "string",
-            "description": "Optional area/city qualifier shown after the address (the address book's\n`address`+`area` identity). The `routing24_list_*` tools return it on\nevery stop/depot row, so accepting it here is what makes that row\nwritable back through `routing24_upsert_stops`/`_depots` unchanged."
+            "description": "Where the address is: town, state, postcode and country as ONE string\n(\"Quinlan, TX 75474\"); there are no separate city, state or zip\nfields. It is geocoded with the address, and a changed `area` geocodes\nthe place again. A NEW `address` does not keep the stored `area`: send\nthe new place's area with it. `routing24_list_*` rows carry it, so a\nlisted row goes back through `routing24_upsert_stops`/`_depots`\nunchanged."
           },
           "service_duration_s": {
             "type": "number",
@@ -2609,7 +2609,7 @@
           },
           "area": {
             "type": "string",
-            "description": "Optional area/city qualifier shown after the address (the address book's\n`address`+`area` identity). The `routing24_list_*` tools return it on\nevery stop/depot row, so accepting it here is what makes that row\nwritable back through `routing24_upsert_stops`/`_depots` unchanged."
+            "description": "Where the address is: town, state, postcode and country as ONE string\n(\"Quinlan, TX 75474\"); there are no separate city, state or zip\nfields. It is geocoded with the address, and a changed `area` geocodes\nthe place again. A NEW `address` does not keep the stored `area`: send\nthe new place's area with it. `routing24_list_*` rows carry it, so a\nlisted row goes back through `routing24_upsert_stops`/`_depots`\nunchanged."
           },
           "delivery": {
             "oneOf": [
@@ -2752,7 +2752,7 @@
           },
           "area": {
             "type": "string",
-            "description": "Optional area/city qualifier shown after the address (the address book's\n`address`+`area` identity). The `routing24_list_*` tools return it on\nevery stop/depot row, so accepting it here is what makes that row\nwritable back through `routing24_upsert_stops`/`_depots` unchanged."
+            "description": "Where the address is: town, state, postcode and country as ONE string\n(\"Quinlan, TX 75474\"); there are no separate city, state or zip\nfields. It is geocoded with the address, and a changed `area` geocodes\nthe place again. A NEW `address` does not keep the stored `area`: send\nthe new place's area with it. `routing24_list_*` rows carry it, so a\nlisted row goes back through `routing24_upsert_stops`/`_depots`\nunchanged."
           },
           "id": {
             "type": "string"
@@ -3251,7 +3251,7 @@
                 },
                 "matched": {
                   "type": "string",
-                  "description": "Canonical address the geocoder matched, when this call resolved the row."
+                  "description": "The address and area of the place found, when this call resolved the row."
                 }
               },
               "required": [
@@ -3268,7 +3268,7 @@
         "required": [
           "rows"
         ],
-        "description": "Result of `routing24_geocode_addresses`: one row per input, in input order.\nNothing was written — no stop, no depot, no address-book row. `matched` is\nthe canonical address the geocoder resolved for rows it resolved on this\ncall (or in this session); state it when confirming a doubtful address with\nthe user. A row whose `address`+`area` pair the plan already located comes\nback `status: \"geocoded\"` with no `matched`. No coordinates are returned."
+        "description": "Result of `routing24_geocode_addresses`: one row per input, in input order.\nNothing was written — no stop, no depot, no address-book row. `matched` is\nthe address and area of the place the geocoder found, for rows it resolved\non this call (or in this session); state it when confirming a doubtful\naddress with the user. A row whose `address`+`area` pair the plan already located comes\nback `status: \"geocoded\"` with no `matched`. No coordinates are returned."
       },
       "DeleteByIdsInput": {
         "type": "object",
